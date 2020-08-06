@@ -6,19 +6,17 @@ from torch.nn import functional as F
 
 from mmdet3d.core.post_processing import aligned_3d_nms
 from mmdet3d.models.builder import build_loss
-from mmdet3d.models.dense_heads.primitive_head import PrimitiveHead
-from mmdet3d.models.dense_heads.proposal_module_refine import \
-    ProposalModuleRefine
 from mmdet3d.models.losses import chamfer_distance
 from mmdet3d.models.model_utils import VoteModule
 from mmdet3d.ops import PointSAModule, furthest_point_sample
 from mmdet.core import build_bbox_coder, multi_apply
-from mmdet.models import HEADS
+from mmdet.models import HEADS, build_head
+from .proposal_refine_module import ProposalRefineModule
 
 
 @HEADS.register_module()
 class H3dHead(nn.Module):
-    r"""Bbox head of `Votenet <https://arxiv.org/abs/1904.09664>`_.
+    r"""Bbox head of `H3dnet <https://arxiv.org/abs/2006.05682>`_.
 
     Args:
         num_classes (int): The number of class.
@@ -42,24 +40,29 @@ class H3dHead(nn.Module):
         semantic_loss (dict): Config of point-wise semantic segmentation loss.
     """
 
-    def __init__(self,
-                 num_classes,
-                 bbox_coder,
-                 primitive_list,
-                 train_cfg=None,
-                 test_cfg=None,
-                 vote_moudule_cfg=None,
-                 vote_aggregation_cfg=None,
-                 feat_channels=(128, 128),
-                 conv_cfg=dict(type='Conv1d'),
-                 norm_cfg=dict(type='BN1d'),
-                 objectness_loss=None,
-                 center_loss=None,
-                 dir_class_loss=None,
-                 dir_res_loss=None,
-                 size_class_loss=None,
-                 size_res_loss=None,
-                 semantic_loss=None):
+    def __init__(
+            self,
+            num_classes,
+            bbox_coder,
+            primitive_list,
+            train_cfg=None,
+            test_cfg=None,
+            vote_moudule_cfg=None,
+            vote_aggregation_cfg=None,
+            # suface_matching_cfg=None,
+            # line_matching_cfg=None,
+            # primitive_refine_channels=None,
+            proposal_module_cfg=None,
+            feat_channels=(128, 128),
+            conv_cfg=dict(type='Conv1d'),
+            norm_cfg=dict(type='BN1d'),
+            objectness_loss=None,
+            center_loss=None,
+            dir_class_loss=None,
+            dir_res_loss=None,
+            size_class_loss=None,
+            size_res_loss=None,
+            semantic_loss=None):
         super(H3dHead, self).__init__()
         self.num_classes = num_classes
         self.train_cfg = train_cfg
@@ -82,13 +85,11 @@ class H3dHead(nn.Module):
         self.num_sizes = self.bbox_coder.num_sizes
         self.num_dir_bins = self.bbox_coder.num_dir_bins
 
+        assert len(primitive_list) == 3
         # Primitive module
-        primitive_list[0].pop('type')
-        self.prim_z = PrimitiveHead(**(primitive_list[0]))
-        primitive_list[1].pop('type')
-        self.prim_xy = PrimitiveHead(**(primitive_list[1]))
-        primitive_list[2].pop('type')
-        self.prim_line = PrimitiveHead(**(primitive_list[2]))
+        self.prim_z = build_head(primitive_list[0])
+        self.prim_xy = build_head(primitive_list[1])
+        self.prim_line = build_head(primitive_list[2])
 
         self.vote_module = VoteModule(**vote_moudule_cfg)
         self.vote_aggregation = PointSAModule(**vote_aggregation_cfg)
@@ -117,14 +118,14 @@ class H3dHead(nn.Module):
         self.conv_pred.add_module('conv_out',
                                   nn.Conv1d(prev_channel, conv_out_channel, 1))
 
-        self.pnet_final = ProposalModuleRefine(
-            num_classes,
-            24,
-            bbox_coder['num_sizes'],
-            bbox_coder['mean_sizes'],
-            vote_aggregation_cfg['num_point'],
-            seed_feat_dim=256,
-            with_angle=bbox_coder['with_rot'])
+        self.pnet_final = ProposalRefineModule(
+            num_class=num_classes,
+            num_heading_bin=bbox_coder['num_dir_bins'],
+            num_size_cluster=bbox_coder['num_sizes'],
+            mean_size_arr=bbox_coder['mean_sizes'],
+            num_proposal=vote_aggregation_cfg['num_point'],
+            with_angle=bbox_coder['with_rot'],
+            **proposal_module_cfg)
 
     def init_weights(self):
         """Initialize weights of VoteHead."""
@@ -240,7 +241,7 @@ class H3dHead(nn.Module):
                 which bounding.
 
         Returns:
-            dict: Losses of Votenet.
+            dict: Losses of H3dnet.
         """
         targets = self.get_targets(points, gt_bboxes_3d, gt_labels_3d,
                                    pts_semantic_mask, pts_instance_mask,
@@ -254,22 +255,21 @@ class H3dHead(nn.Module):
         loss_inputs = (bbox_preds, points, gt_bboxes_3d, gt_labels_3d,
                        pts_semantic_mask, pts_instance_mask, img_metas,
                        gt_bboxes_ignore)
+        losses = {}
         loss_z = self.prim_z.loss(*loss_inputs)
         loss_xy = self.prim_xy.loss(*loss_inputs)
         loss_line = self.prim_line.loss(*loss_inputs)
-        objcue_loss = loss_z['flag_loss_z'] + loss_xy['flag_loss_xy'] + \
-            loss_line['flag_loss_line'] + \
-            loss_z['vote_loss_z'] + loss_xy['vote_loss_xy'] + \
-            loss_line['vote_loss_line'] + \
-            loss_z['surface_loss_z'] + loss_xy['surface_loss_xy'] + \
-            loss_line['surface_loss_line'] * 2
+        losses.update(loss_z)
+        losses.update(loss_xy)
+        losses.update(loss_line)
 
         # calculate vote loss
         vote_loss = self.vote_module.get_loss(bbox_preds['seed_points'],
                                               bbox_preds['vote_points'],
                                               bbox_preds['seed_indices'],
                                               vote_target_masks, vote_targets)
-        losses = dict(vote_loss=vote_loss, objcue_loss=objcue_loss)
+        losses['vote_loss'] = vote_loss
+        # losses = dict(vote_loss=vote_loss, objcue_loss=objcue_loss)
         # calculate proposal loss
         proposal_loss = self.get_proposal_stage_loss(
             bbox_preds, size_class_targets, size_res_targets,
@@ -299,7 +299,6 @@ class H3dHead(nn.Module):
         refined_loss = self.pnet_final.loss(bbox3d_opt, *loss_inputs)
         for key in refined_loss.keys():
             losses[key + '_potential'] = refined_loss[key]
-        # import pdb; pdb.set_trace()
         return losses
 
     def get_targets(self,
@@ -618,6 +617,34 @@ class H3dHead(nn.Module):
                                 box_loss_weights,
                                 valid_gt_weights,
                                 suffix=''):
+        """Compute loss for the aggregation module.
+
+        Args:
+            bbox_preds (dict): Predictions from forward of vote head.
+            size_class_targets (torch.Tensor): Ground truth \
+                size class of each prediction bounding box.
+            size_res_targets (torch.Tensor): Ground truth \
+                size residual of each prediction bounding box.
+            dir_class_targets (torch.Tensor): Ground truth \
+                direction class of each prediction bounding box.
+            dir_res_targets (torch.Tensor): Ground truth \
+                direction residual of each prediction bounding box.
+            center_targets (torch.Tensor): Ground truth center \
+                of each prediction bounding box.
+            mask_targets (torch.Tensor): Validation of each \
+                prediction bounding box.
+            objectness_targets (torch.Tensor): Ground truth \
+                objectness label of each prediction bounding box.
+            objectness_weights (torch.Tensor): Weights of objectness \
+                loss for each prediction bounding box.
+            box_loss_weights (torch.Tensor): Weights of regression \
+                loss for each prediction bounding box.
+            valid_gt_weights (torch.Tensor): Validation of each \
+                ground truth bounding box.
+
+        Returns:
+            dict: Losses of aggregation module.
+        """
         device = bbox_preds['dir_res_norm' + suffix].device
         # calculate objectness loss
         objectness_loss = self.objectness_loss(
