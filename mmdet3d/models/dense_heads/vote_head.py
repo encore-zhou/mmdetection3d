@@ -164,6 +164,7 @@ class VoteHead(nn.Module):
                                                      sample_indices)
         aggregated_points, features, aggregated_indices = vote_aggregation_ret
         results['aggregated_points'] = aggregated_points
+        results['aggregated_features'] = features
         results['aggregated_indices'] = aggregated_indices
 
         # 3. predict bbox and score

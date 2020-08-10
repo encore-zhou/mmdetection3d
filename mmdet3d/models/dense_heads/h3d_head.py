@@ -1,14 +1,11 @@
 import numpy as np
 import torch
-from mmcv.cnn import ConvModule
 from torch import nn as nn
 from torch.nn import functional as F
 
 from mmdet3d.core.post_processing import aligned_3d_nms
 from mmdet3d.models.builder import build_loss
 from mmdet3d.models.losses import chamfer_distance
-from mmdet3d.models.model_utils import VoteModule
-from mmdet3d.ops import PointSAModule, furthest_point_sample
 from mmdet.core import build_bbox_coder, multi_apply
 from mmdet.models import HEADS, build_head
 from .proposal_refine_module import ProposalRefineModule
@@ -87,33 +84,6 @@ class H3dHead(nn.Module):
         self.prim_xy = build_head(primitive_list[1])
         self.prim_line = build_head(primitive_list[2])
 
-        self.vote_module = VoteModule(**vote_moudule_cfg)
-        self.vote_aggregation = PointSAModule(**vote_aggregation_cfg)
-
-        prev_channel = vote_aggregation_cfg['mlp_channels'][-1]
-        conv_pred_list = list()
-        for k in range(len(feat_channels)):
-            conv_pred_list.append(
-                ConvModule(
-                    prev_channel,
-                    feat_channels[k],
-                    1,
-                    padding=0,
-                    conv_cfg=conv_cfg,
-                    norm_cfg=norm_cfg,
-                    bias=True,
-                    inplace=True))
-            prev_channel = feat_channels[k]
-        self.conv_pred = nn.Sequential(*conv_pred_list)
-
-        # Objectness scores (2), center residual (3),
-        # heading class+residual (num_dir_bins*2),
-        # size class+residual(num_sizes*4)
-        conv_out_channel = (2 + 3 + self.num_dir_bins * 2 +
-                            self.num_sizes * 4 + num_classes)
-        self.conv_pred.add_module('conv_out',
-                                  nn.Conv1d(prev_channel, conv_out_channel, 1))
-
         self.pnet_final = ProposalRefineModule(
             num_class=num_classes,
             num_heading_bin=bbox_coder['num_dir_bins'],
@@ -123,8 +93,13 @@ class H3dHead(nn.Module):
             with_angle=bbox_coder['with_rot'],
             **proposal_module_cfg)
 
-    def init_weights(self):
-        """Initialize weights of VoteHead."""
+    def init_weights(self, pretrained=None):
+        """Initialize the weights in detector.
+
+        Args:
+            pretrained (str, optional): Path to pre-trained weights.
+                Defaults to None.
+        """
         pass
 
     def forward(self, feat_dict, sample_mod):
@@ -147,69 +122,21 @@ class H3dHead(nn.Module):
             dict: Predictions of vote head.
         """
         assert sample_mod in ['vote', 'seed', 'random']
-
-        seed_points = feat_dict['fp_xyz_net0'][-1]
-        # seed_features = feat_dict['fp_features_net0'][-1]
-        seed_indices = feat_dict['fp_indices_net0'][-1]
-
-        results = dict(seed_points=seed_points, seed_indices=seed_indices)
-
-        # Existence flag prediction
-        features_hd_discriptor = feat_dict['hd_feature']
-
         result_z = self.prim_z(feat_dict, sample_mod)
-        results.update(result_z)
+        feat_dict.update(result_z)
         result_xy = self.prim_xy(feat_dict, sample_mod)
-        results.update(result_xy)
+        feat_dict.update(result_xy)
         result_line = self.prim_line(feat_dict, sample_mod)
-        results.update(result_line)
+        feat_dict.update(result_line)
 
-        # 1. generate vote_points from seed_points
-        vote_points, vote_features = self.vote_module(seed_points,
-                                                      features_hd_discriptor)
-        results['vote_points'] = vote_points
-        results['vote_features'] = vote_features
-
-        # 2. aggregate vote_points
-        if sample_mod == 'vote':
-            # use fps in vote_aggregation
-            sample_indices = None
-        elif sample_mod == 'seed':
-            # FPS on seed and choose the votes corresponding to the seeds
-            sample_indices = furthest_point_sample(seed_points,
-                                                   self.num_proposal)
-        elif sample_mod == 'random':
-            # Random sampling from the votes
-            batch_size, num_seed = seed_points.shape[:2]
-            sample_indices = seed_points.new_tensor(
-                torch.randint(0, num_seed, (batch_size, self.num_proposal)),
-                dtype=torch.int32)
-        else:
-            raise NotImplementedError
-
-        vote_aggregation_ret = self.vote_aggregation(vote_points,
-                                                     vote_features,
-                                                     sample_indices)
-
-        aggregated_points, features, aggregated_indices = vote_aggregation_ret
-        results['aggregated_points'] = aggregated_points
-        results['aggregated_features'] = features
-        results['aggregated_indices'] = aggregated_indices
-
-        # 3. predict bbox and score
-        predictions = self.conv_pred(features)
-
-        # 4. decode predictions
-        decode_res = self.bbox_coder.split_pred(predictions, aggregated_points)
-        results.update(decode_res)
-
-        refine_predictions, refine_dict = self.pnet_final(results)
-        results.update(refine_dict)
+        aggregated_points = feat_dict['aggregated_points']
+        refine_predictions, refine_dict = self.pnet_final(feat_dict)
+        feat_dict.update(refine_dict)
         refine_decode_res = self.bbox_coder.split_pred(refine_predictions,
                                                        aggregated_points)
         for key in refine_decode_res.keys():
-            results[key + '_opt'] = refine_decode_res[key]
-        return results
+            feat_dict[key + '_opt'] = refine_decode_res[key]
+        return feat_dict
 
     def loss(self,
              bbox_preds,
@@ -258,21 +185,6 @@ class H3dHead(nn.Module):
         losses.update(loss_z)
         losses.update(loss_xy)
         losses.update(loss_line)
-
-        # calculate vote loss
-        vote_loss = self.vote_module.get_loss(bbox_preds['seed_points'],
-                                              bbox_preds['vote_points'],
-                                              bbox_preds['seed_indices'],
-                                              vote_target_masks, vote_targets)
-        losses['vote_loss'] = vote_loss
-        # losses = dict(vote_loss=vote_loss, objcue_loss=objcue_loss)
-        # calculate proposal loss
-        proposal_loss = self.get_proposal_stage_loss(
-            bbox_preds, size_class_targets, size_res_targets,
-            dir_class_targets, dir_res_targets, center_targets, mask_targets,
-            objectness_targets, objectness_weights, box_loss_weights,
-            valid_gt_weights)
-        losses.update(proposal_loss)
 
         # calculate refined proposal loss
         refined_proposal_loss = self.get_proposal_stage_loss(

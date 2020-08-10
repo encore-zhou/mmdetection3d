@@ -2,25 +2,29 @@ import torch
 
 from mmdet3d.core import bbox3d2result, merge_aug_bboxes_3d
 from mmdet.models import DETECTORS
-from .single_stage import SingleStage3DDetector
+from .two_stage import TwoStage3DDetector
 
 
 @DETECTORS.register_module()
-class H3DNet(SingleStage3DDetector):
-    """H3DNet model.
+class H3DNet(TwoStage3DDetector):
+    r"""H3DNet model.
 
-    https://arxiv.org/abs/2006.05682
+    Please refer to the `paper <https://arxiv.org/abs/2006.05682>`_
     """
 
     def __init__(self,
                  backbone,
-                 bbox_head=None,
+                 neck=None,
+                 rpn_head=None,
+                 roi_head=None,
                  train_cfg=None,
                  test_cfg=None,
                  pretrained=None):
         super(H3DNet, self).__init__(
             backbone=backbone,
-            bbox_head=bbox_head,
+            neck=neck,
+            rpn_head=rpn_head,
+            roi_head=roi_head,
             train_cfg=train_cfg,
             test_cfg=test_cfg,
             pretrained=pretrained)
@@ -53,11 +57,29 @@ class H3DNet(SingleStage3DDetector):
         points_cat = torch.stack(points)
 
         x = self.extract_feat(points_cat)
-        bbox_preds = self.bbox_head(x, self.train_cfg.sample_mod)
+        x['fp_xyz'] = [x['fp_xyz_net0'][-1]]
+        x['fp_features'] = [x['hd_feature']]
+        x['fp_indices'] = [x['fp_indices_net0'][-1]]
+
+        losses = dict()
+        if self.with_rpn:
+            rpn_outs = self.rpn_head(x, self.train_cfg.rpn.sample_mod)
+            rpn_loss_inputs = (points, gt_bboxes_3d, gt_labels_3d,
+                               pts_semantic_mask, pts_instance_mask, img_metas)
+            rpn_losses = self.rpn_head.loss(
+                rpn_outs, *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+            losses.update(rpn_losses)
+            x.update(rpn_outs)
+        else:
+            raise NotImplementedError
+
+        roi_preds = self.roi_head(x, self.train_cfg.rcnn.sample_mod)
         loss_inputs = (points, gt_bboxes_3d, gt_labels_3d, pts_semantic_mask,
                        pts_instance_mask, img_metas)
-        losses = self.bbox_head.loss(
-            bbox_preds, *loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+        roi_losses = self.roi_head.loss(
+            roi_preds, *loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+        losses.update(roi_losses)
+
         return losses
 
     def simple_test(self, points, img_metas, imgs=None, rescale=False):
@@ -74,8 +96,18 @@ class H3DNet(SingleStage3DDetector):
         points_cat = torch.stack(points)
 
         x = self.extract_feat(points_cat)
-        bbox_preds = self.bbox_head(x, self.test_cfg.sample_mod)
-        bbox_list = self.bbox_head.get_bboxes(
+        x['fp_xyz'] = [x['fp_xyz_net0'][-1]]
+        x['fp_features'] = [x['hd_feature']]
+        x['fp_indices'] = [x['fp_indices_net0'][-1]]
+
+        if self.with_rpn:
+            rpn_outs = self.rpn_head(x, self.train_cfg.rpn.sample_mod)
+            x.update(rpn_outs)
+        else:
+            raise NotImplementedError
+
+        bbox_preds = self.roi_head(x, self.test_cfg.rcnn.sample_mod)
+        bbox_list = self.roi_head.get_bboxes(
             points_cat, bbox_preds, img_metas, rescale=rescale, suffix='_opt')
         bbox_results = [
             bbox3d2result(bboxes, scores, labels)
@@ -91,8 +123,14 @@ class H3DNet(SingleStage3DDetector):
         # only support aug_test for one sample
         aug_bboxes = []
         for x, pts_cat, img_meta in zip(feats, points_cat, img_metas):
-            bbox_preds = self.bbox_head(x, self.test_cfg.sample_mod)
-            bbox_list = self.bbox_head.get_bboxes(
+            if self.with_rpn:
+                rpn_outs = self.rpn_head(x, self.train_cfg.rpn.sample_mod)
+                x.update(rpn_outs)
+            else:
+                raise NotImplementedError
+
+            bbox_preds = self.roi_head(x, self.test_cfg.sample_mod)
+            bbox_list = self.roi_head.get_bboxes(
                 pts_cat, bbox_preds, img_meta, rescale=rescale, suffix='_opt')
             bbox_list = [
                 dict(boxes_3d=bboxes, scores_3d=scores, labels_3d=labels)
