@@ -512,6 +512,7 @@ def test_primitive_head():
             num_point=100,
             num_point_line=10,
             line_thresh=0.2))
+
     self = build_head(primitive_head_cfg).cuda()
     fp_xyz = [torch.rand([2, 64, 3], dtype=torch.float32).cuda()]
     hd_features = torch.rand([2, 256, 64], dtype=torch.float32).cuda()
@@ -558,3 +559,42 @@ def test_primitive_head():
     assert losses_dict['size_loss_z'] >= 0
     assert losses_dict['sem_loss_z'] >= 0
     assert losses_dict['surface_loss_z'] >= 0
+
+
+def test_h3d_head():
+    if not torch.cuda.is_available():
+        pytest.skip('test requires GPU and torch+cuda')
+    _setup_seed(0)
+
+    h3d_head_cfg = _get_head_cfg('h3dnet/h3dnet_8x8_scannet-3d-18class.py')
+    self = build_head(h3d_head_cfg).cuda()
+
+    # test forward
+    fp_xyz = [torch.rand([1, 1024, 3], dtype=torch.float32).cuda()]
+    hd_features = torch.rand([1, 256, 1024], dtype=torch.float32).cuda()
+    fp_indices = [torch.randint(0, 128, [1, 1024]).cuda()]
+    input_dict = dict(
+        fp_xyz_net0=fp_xyz, hd_feature=hd_features, fp_indices_net0=fp_indices)
+    ret_dict = self(input_dict, 'vote')
+
+    # test loss
+    points = torch.rand([1, 1024, 3], dtype=torch.float32).cuda()
+    ret_dict['seed_points'] = fp_xyz[0]
+    ret_dict['seed_indices'] = fp_indices[0]
+
+    from mmdet3d.core.bbox import DepthInstance3DBoxes
+    gt_bboxes_3d = [
+        DepthInstance3DBoxes(torch.rand([4, 7], dtype=torch.float32).cuda()),
+        DepthInstance3DBoxes(torch.rand([4, 7], dtype=torch.float32).cuda())
+    ]
+    gt_labels_3d = torch.randint(0, 18, [1, 4]).cuda()
+    gt_labels_3d = [gt_labels_3d[0]]
+    pts_semantic_mask = torch.randint(0, 19, [1, 1024]).cuda()
+    pts_semantic_mask = [pts_semantic_mask[0]]
+    pts_instance_mask = torch.randint(0, 4, [1, 1024]).cuda()
+    pts_instance_mask = [pts_instance_mask[0]]
+
+    loss_dict = self.loss(ret_dict, points, gt_bboxes_3d, gt_labels_3d,
+                          pts_semantic_mask, pts_instance_mask)
+
+    assert loss_dict['primitive_centroid_reg_loss_potential'] >= 0
