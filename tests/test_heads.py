@@ -566,15 +566,33 @@ def test_h3d_head():
         pytest.skip('test requires GPU and torch+cuda')
     _setup_seed(0)
 
-    h3d_head_cfg = _get_head_cfg('h3dnet/h3dnet_8x8_scannet-3d-18class.py')
+    h3d_head_cfg = _get_roi_head_cfg('h3dnet/h3dnet_8x8_scannet-3d-18class.py')
     self = build_head(h3d_head_cfg).cuda()
 
     # test forward
     fp_xyz = [torch.rand([1, 1024, 3], dtype=torch.float32).cuda()]
     hd_features = torch.rand([1, 256, 1024], dtype=torch.float32).cuda()
     fp_indices = [torch.randint(0, 128, [1, 1024]).cuda()]
+    center = torch.rand([1, 256, 3], dtype=torch.float32).cuda()
+    size_res = torch.rand([1, 256, 18, 3], dtype=torch.float32).cuda()
+    sem_scores = torch.rand([1, 256, 18], dtype=torch.float32).cuda()
+    dir_class = torch.rand([1, 256, 24], dtype=torch.float32).cuda()
+    dir_res = torch.rand([1, 256, 24], dtype=torch.float32).cuda()
+    aggregated_points = torch.rand([1, 256, 3], dtype=torch.float32).cuda()
+    aggregated_features = torch.rand([1, 128, 256], dtype=torch.float32).cuda()
+
     input_dict = dict(
-        fp_xyz_net0=fp_xyz, hd_feature=hd_features, fp_indices_net0=fp_indices)
+        fp_xyz_net0=fp_xyz,
+        hd_feature=hd_features,
+        fp_indices_net0=fp_indices,
+        aggregated_points=aggregated_points,
+        center=center,
+        size_res=size_res,
+        sem_scores=sem_scores,
+        dir_class=dir_class,
+        dir_res=dir_res,
+        aggregated_features=aggregated_features)
+
     ret_dict = self(input_dict, 'vote')
 
     # test loss
