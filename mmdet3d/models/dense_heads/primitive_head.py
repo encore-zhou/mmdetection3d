@@ -373,7 +373,7 @@ class PrimitiveHead(nn.Module):
                         ind[sel][line_sel1]] = linecenter - x[sel][line_sel1]
                     point_line_sem[ind[sel][line_sel1]] = points.new_tensor([
                         linecenter[0], linecenter[1], linecenter[2],
-                        (pts_semantic_mask[ind][0])
+                        pts_semantic_mask[ind][0]
                     ])
                 if torch.sum(line_sel2) > self.train_cfg['num_point_line']:
                     point_line_mask[ind[sel][line_sel2]] = 1.0
@@ -383,7 +383,7 @@ class PrimitiveHead(nn.Module):
                         ind[sel][line_sel2]] = linecenter - x[sel][line_sel2]
                     point_line_sem[ind[sel][line_sel2]] = points.new_tensor([
                         linecenter[0], linecenter[1], linecenter[2],
-                        (pts_semantic_mask[ind][0])
+                        pts_semantic_mask[ind][0]
                     ])
                 if torch.sum(line_sel3) > self.train_cfg['num_point_line']:
                     point_line_mask[ind[sel][line_sel3]] = 1.0
@@ -790,7 +790,7 @@ class PrimitiveHead(nn.Module):
         else:
             size_loss = torch.tensor(0).float().to(center_loss.device)
 
-        # 3.4 Semantic cls loss
+        # Semantic cls loss
         sem_cls_label = seed_gt_sem[:, :, -1].long()
         end_points['supp_sem_' + mode] = sem_cls_label
         sem_cls_loss = self.semantic_loss(

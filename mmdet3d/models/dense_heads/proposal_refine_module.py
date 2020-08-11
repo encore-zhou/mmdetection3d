@@ -104,29 +104,30 @@ class ProposalRefineModule(nn.Module):
     r"""Bbox head of `H3dnet <https://arxiv.org/abs/2006.05682>`_.
 
     Args:
-        num_classes (int): The number of class.
-        bbox_coder (:obj:`BaseBBoxCoder`): Bbox coder for encoding and
-            decoding boxes.
-        primitive_list (list[dict]): Configs of primitive head.
-        train_cfg (dict): Config for training.
-        test_cfg (dict): Config for testing.
-        vote_moudule_cfg (dict): Config of VoteModule for point-wise votes.
-        vote_aggregation_cfg (dict): Config of vote aggregation layer.
-        feat_channels (tuple[int]): Convolution channels of
+        num_classes (int): The number of classes.
+        num_heading_bin (int): Number of bins to encode direction angle.
+        num_size_cluster (int): Number of size clusters.
+        mean_size_arr (list[list[int]]): Mean size of bboxes in each class.
+        num_proposal (int): The number of proposal.
+        suface_matching_cfg (dict): Config for suface primitive matching.
+        line_matching_cfg (dict): Config for line primitive matching.
+        primitive_refine_channels (tuple[int]): Convolution channels of
             prediction layer.
+        upper_thresh (float): Threshold for line matching.
+        surface_thresh (float): Threshold for suface matching.
+        line_thresh (float): Threshold for line matching.
+        with_angle (bool): Whether the bbox is with rotation.
+        train_cfg (dict): Config for training.
+        cues_objectness_loss (dict): Config of cues objectness loss.
+        cues_semantic_loss (dict): Config of cues semantic loss.
+        proposal_objectness_loss (dict): Config of proposal objectness
+            loss.
         conv_cfg (dict): Config of convolution in prediction layer.
         norm_cfg (dict): Config of BN in prediction layer.
-        objectness_loss (dict): Config of objectness loss.
-        center_loss (dict): Config of center loss.
-        dir_class_loss (dict): Config of direction classification loss.
-        dir_res_loss (dict): Config of direction residual regression loss.
-        size_class_loss (dict): Config of size classification loss.
-        size_res_loss (dict): Config of size residual regression loss.
-        semantic_loss (dict): Config of point-wise semantic segmentation loss.
     """
 
     def __init__(self,
-                 num_class,
+                 num_classes,
                  num_heading_bin,
                  num_size_cluster,
                  mean_size_arr,
@@ -137,8 +138,8 @@ class ProposalRefineModule(nn.Module):
                  upper_thresh=100.0,
                  surface_thresh=0.5,
                  line_thresh=0.5,
-                 train_cfg=None,
                  with_angle=False,
+                 train_cfg=None,
                  cues_objectness_loss=None,
                  cues_semantic_loss=None,
                  proposal_objectness_loss=None,
@@ -146,7 +147,7 @@ class ProposalRefineModule(nn.Module):
                  norm_cfg=dict(type='BN1d')):
         super().__init__()
 
-        self.num_class = num_class
+        self.num_classes = num_classes
         self.num_heading_bin = num_heading_bin
         self.num_size_cluster = num_size_cluster
         self.mean_size_arr = mean_size_arr
@@ -243,7 +244,7 @@ class ProposalRefineModule(nn.Module):
                     inplace=False))
             prev_channel = primitive_refine_channels[k]
         conv_out_channel = (2 + 3 + num_heading_bin * 2 +
-                            num_size_cluster * 4 + self.num_class)
+                            num_size_cluster * 4 + self.num_classes)
         self.proposal_pred.append(nn.Conv1d(prev_channel, conv_out_channel, 1))
 
         self.softmax_normal = torch.nn.Softmax(dim=1)
@@ -347,84 +348,8 @@ class ProposalRefineModule(nn.Module):
         obj_surface_center, obj_line_center = \
             get_surface_line_points_batch_pytorch(
                 obj_size, pred_heading, obj_center)
-        obj_surface_feature = original_feature.repeat(1, 1, 6)
         ret_dict['surface_center_object'] = obj_surface_center
-        # Add an indicator for different surfaces
-        obj_upper_indicator = torch.zeros(
-            (batch_size, object_proposal, 6)).cuda()
-        obj_upper_indicator[:, :, 0] = 1
-        obj_lower_indicator = torch.zeros(
-            (batch_size, object_proposal, 6)).cuda()
-        obj_lower_indicator[:, :, 1] = 1
-        obj_front_indicator = torch.zeros(
-            (batch_size, object_proposal, 6)).cuda()
-        obj_front_indicator[:, :, 2] = 1
-        obj_back_indicator = torch.zeros(
-            (batch_size, object_proposal, 6)).cuda()
-        obj_back_indicator[:, :, 3] = 1
-        obj_left_indicator = torch.zeros(
-            (batch_size, object_proposal, 6)).cuda()
-        obj_left_indicator[:, :, 4] = 1
-        obj_right_indicator = torch.zeros(
-            (batch_size, object_proposal, 6)).cuda()
-        obj_right_indicator[:, :, 5] = 1
-        obj_surface_indicator = torch.cat(
-            (obj_upper_indicator, obj_lower_indicator, obj_front_indicator,
-             obj_back_indicator, obj_left_indicator, obj_right_indicator),
-            dim=1).transpose(2, 1).contiguous()
-        obj_surface_feature = torch.cat(
-            (obj_surface_indicator, obj_surface_feature), dim=1)
-
-        obj_line_feature = original_feature.repeat(1, 1, 12)
         ret_dict['line_center_object'] = obj_line_center
-        # Add an indicator for different lines
-        obj_line_indicator0 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator0[:, 0, :] = 1
-        obj_line_indicator1 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator1[:, 1, :] = 1
-        obj_line_indicator2 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator2[:, 2, :] = 1
-        obj_line_indicator3 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator3[:, 3, :] = 1
-
-        obj_line_indicator4 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator4[:, 4, :] = 1
-        obj_line_indicator5 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator5[:, 5, :] = 1
-        obj_line_indicator6 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator6[:, 6, :] = 1
-        obj_line_indicator7 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator7[:, 7, :] = 1
-
-        obj_line_indicator8 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator8[:, 8, :] = 1
-        obj_line_indicator9 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator9[:, 9, :] = 1
-        obj_line_indicator10 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator10[:, 10, :] = 1
-        obj_line_indicator11 = torch.zeros(
-            (batch_size, 12, object_proposal)).cuda()
-        obj_line_indicator11[:, 11, :] = 1
-
-        obj_line_indicator = torch.cat(
-            (obj_line_indicator0, obj_line_indicator1, obj_line_indicator2,
-             obj_line_indicator3, obj_line_indicator4, obj_line_indicator5,
-             obj_line_indicator6, obj_line_indicator7, obj_line_indicator8,
-             obj_line_indicator9, obj_line_indicator10, obj_line_indicator11),
-            dim=2)
-        obj_line_feature = torch.cat((obj_line_indicator, obj_line_feature),
-                                     dim=1)
 
         surface_xyz, surface_features, _ = self.match_surface_center(
             surface_center_pred,

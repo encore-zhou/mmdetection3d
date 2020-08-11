@@ -16,14 +16,15 @@ class H3dHead(nn.Module):
     r"""Bbox head of `H3dnet <https://arxiv.org/abs/2006.05682>`_.
 
     Args:
-        num_classes (int): The number of class.
+        num_classes (int): The number of classes.
         bbox_coder (:obj:`BaseBBoxCoder`): Bbox coder for encoding and
             decoding boxes.
         primitive_list (list[dict]): Configs of primitive head.
         train_cfg (dict): Config for training.
         test_cfg (dict): Config for testing.
-        vote_moudule_cfg (dict): Config of VoteModule for point-wise votes.
-        vote_aggregation_cfg (dict): Config of vote aggregation layer.
+        gt_per_seed (int): Number of ground truth votes generated
+            from each seed point.
+        num_proposal (int): Number of proposal votes generated.
         feat_channels (tuple[int]): Convolution channels of
             prediction layer.
         conv_cfg (dict): Config of convolution in prediction layer.
@@ -43,9 +44,9 @@ class H3dHead(nn.Module):
                  primitive_list,
                  train_cfg=None,
                  test_cfg=None,
-                 vote_moudule_cfg=None,
-                 vote_aggregation_cfg=None,
                  proposal_module_cfg=None,
+                 gt_per_seed=1,
+                 num_proposal=256,
                  feat_channels=(128, 128),
                  conv_cfg=dict(type='Conv1d'),
                  norm_cfg=dict(type='BN1d'),
@@ -60,8 +61,8 @@ class H3dHead(nn.Module):
         self.num_classes = num_classes
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
-        self.gt_per_seed = vote_moudule_cfg['gt_per_seed']
-        self.num_proposal = vote_aggregation_cfg['num_point']
+        self.gt_per_seed = gt_per_seed
+        self.num_proposal = num_proposal
 
         self.objectness_loss = build_loss(objectness_loss)
         self.center_loss = build_loss(center_loss)
@@ -70,9 +71,6 @@ class H3dHead(nn.Module):
         self.size_class_loss = build_loss(size_class_loss)
         self.size_res_loss = build_loss(size_res_loss)
         self.semantic_loss = build_loss(semantic_loss)
-
-        assert vote_aggregation_cfg['mlp_channels'][0] == vote_moudule_cfg[
-            'in_channels']
 
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.num_sizes = self.bbox_coder.num_sizes
@@ -85,11 +83,11 @@ class H3dHead(nn.Module):
         self.prim_line = build_head(primitive_list[2])
 
         self.pnet_final = ProposalRefineModule(
-            num_class=num_classes,
+            num_classes=num_classes,
             num_heading_bin=bbox_coder['num_dir_bins'],
             num_size_cluster=bbox_coder['num_sizes'],
             mean_size_arr=bbox_coder['mean_sizes'],
-            num_proposal=vote_aggregation_cfg['num_point'],
+            num_proposal=num_proposal,
             with_angle=bbox_coder['with_rot'],
             **proposal_module_cfg)
 
