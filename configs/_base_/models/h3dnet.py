@@ -45,7 +45,7 @@ model = dict(
     type='H3DNet',
     backbone=dict(
         type='MultiBackbone',
-        num_stream=4,
+        num_streams=4,
         conv_cfg=dict(type='Conv1d'),
         norm_cfg=dict(type='BN1d', eps=1e-5, momentum=0.01),
         act_cfg=dict(type='ReLU'),

@@ -12,7 +12,7 @@ class MultiBackbone(nn.Module):
     """MultiBackbone with different config. '''.
 
     Args:
-        num_stream (int): The number of backbones.
+        num_streams (int): The number of backbones.
         backbones (list or dict): A list of backbone configs.
         aggregation_mlp_channels (list[int]): Specify the mlp layers
             for feature aggregation.
@@ -22,7 +22,7 @@ class MultiBackbone(nn.Module):
     """
 
     def __init__(self,
-                 num_stream,
+                 num_streams,
                  backbones,
                  aggregation_mlp_channels=None,
                  conv_cfg=dict(type='Conv1d'),
@@ -33,12 +33,12 @@ class MultiBackbone(nn.Module):
         assert isinstance(backbones, dict) or isinstance(backbones, list)
         if isinstance(backbones, dict):
             backbones_list = []
-            for ind in range(num_stream):
+            for ind in range(num_streams):
                 backbones_list.append(copy.deepcopy(backbones))
                 backbones_list[-1]['suffix'] = 'net{}'.format(ind)
             backbones = backbones_list
 
-        assert len(backbones) == num_stream
+        assert len(backbones) == num_streams
 
         self.backbone_list = nn.ModuleList()
         # Rename the ret_dict with different suffixs.
@@ -46,15 +46,14 @@ class MultiBackbone(nn.Module):
 
         out_channels = 0
 
-        for bb_cfg in backbones:
-            assert 'suffix' in bb_cfg.keys()
-            # assert 'collector' in bb_cfg.keys()
+        for backbone_cfg in backbones:
+            assert 'suffix' in backbone_cfg.keys()
 
-            self.suffix_list.append(bb_cfg['suffix'])
-            bb_cfg.pop('suffix')
+            self.suffix_list.append(backbone_cfg['suffix'])
+            backbone_cfg.pop('suffix')
 
-            out_channels += bb_cfg['fp_channels'][-1][-1]
-            self.backbone_list.append(build_backbone(bb_cfg))
+            out_channels += backbone_cfg['fp_channels'][-1][-1]
+            self.backbone_list.append(build_backbone(backbone_cfg))
 
         # Feature aggregation layers
         if aggregation_mlp_channels is None:

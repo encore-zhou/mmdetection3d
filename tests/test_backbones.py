@@ -49,7 +49,7 @@ def test_multi_backbone():
     # test list config
     cfg_list = dict(
         type='MultiBackbone',
-        num_stream=4,
+        num_streams=4,
         backbones=[
             dict(
                 type='PointNet2SASSG',
@@ -116,7 +116,7 @@ def test_multi_backbone():
     # test dict config
     cfg_dict = dict(
         type='MultiBackbone',
-        num_stream=2,
+        num_streams=2,
         aggregation_mlp_channels=[512, 128],
         backbones=dict(
             type='PointNet2SASSG',
