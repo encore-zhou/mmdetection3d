@@ -103,7 +103,7 @@ class H3DNet(TwoStage3DDetector):
         x['fp_xyz'] = [x['fp_xyz_net0'][-1]]
         x['fp_features'] = [x['hd_feature']]
         x['fp_indices'] = [x['fp_indices_net0'][-1]]
-        # import pdb; pdb.set_trace()
+
         if self.with_rpn:
             rpn_outs = self.rpn_head(x, self.test_cfg.rpn.sample_mod)
             x.update(rpn_outs)
