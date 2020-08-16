@@ -103,15 +103,15 @@ class H3DNet(TwoStage3DDetector):
         x['fp_xyz'] = [x['fp_xyz_net0'][-1]]
         x['fp_features'] = [x['hd_feature']]
         x['fp_indices'] = [x['fp_indices_net0'][-1]]
-
+        # import pdb; pdb.set_trace()
         if self.with_rpn:
-            rpn_outs = self.rpn_head(x, self.train_cfg.rpn.sample_mod)
+            rpn_outs = self.rpn_head(x, self.test_cfg.rpn.sample_mod)
             x.update(rpn_outs)
         else:
             raise NotImplementedError
 
-        return self.roi_head.simple_test(x, points_cat, img_metas,
-                                         self.test_cfg.rcnn.sample_mod)
+        return self.roi_head.simple_test(x, self.test_cfg.rcnn.sample_mod,
+                                         img_metas, points_cat)
 
     def aug_test(self, points, img_metas, imgs=None, rescale=False):
         """Test with augmentation."""
@@ -128,7 +128,7 @@ class H3DNet(TwoStage3DDetector):
                 raise NotImplementedError
 
             bbox_results = self.roi_head.simple_test(
-                x, points_cat, img_metas, self.test_cfg.rcnn.sample_mod)
+                x, self.test_cfg.rcnn.sample_mod, img_metas, points_cat)
             aug_bboxes.append(bbox_results)
 
         # after merging, bboxes will be rescaled to the original image size

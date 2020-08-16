@@ -200,9 +200,6 @@ model = dict(
         primitive_list=[primitive_z_cfg, primitive_xy_cfg, primitive_line_cfg],
         bbox_head=dict(
             num_classes=18,
-            primitive_list=[
-                primitive_z_cfg, primitive_xy_cfg, primitive_line_cfg
-            ],
             bbox_coder=dict(
                 type='PartialBinBasedBBoxCoder',
                 num_sizes=18,
