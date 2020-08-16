@@ -1,6 +1,6 @@
 import torch
 
-from mmdet3d.core import bbox3d2result, merge_aug_bboxes_3d
+from mmdet3d.core import merge_aug_bboxes_3d
 from mmdet.models import DETECTORS
 from .two_stage import TwoStage3DDetector
 
@@ -110,14 +110,8 @@ class H3DNet(TwoStage3DDetector):
         else:
             raise NotImplementedError
 
-        bbox_preds = self.roi_head(x, self.test_cfg.rcnn.sample_mod)
-        bbox_list = self.roi_head.get_bboxes(
-            points_cat, bbox_preds, img_metas, rescale=rescale, suffix='_opt')
-        bbox_results = [
-            bbox3d2result(bboxes, scores, labels)
-            for bboxes, scores, labels in bbox_list
-        ]
-        return bbox_results[0]
+        return self.roi_head.simple_test(x, points_cat, img_metas,
+                                         self.test_cfg.rcnn.sample_mod)
 
     def aug_test(self, points, img_metas, imgs=None, rescale=False):
         """Test with augmentation."""
@@ -133,14 +127,9 @@ class H3DNet(TwoStage3DDetector):
             else:
                 raise NotImplementedError
 
-            bbox_preds = self.roi_head(x, self.test_cfg.sample_mod)
-            bbox_list = self.roi_head.get_bboxes(
-                pts_cat, bbox_preds, img_meta, rescale=rescale, suffix='_opt')
-            bbox_list = [
-                dict(boxes_3d=bboxes, scores_3d=scores, labels_3d=labels)
-                for bboxes, scores, labels in bbox_list
-            ]
-            aug_bboxes.append(bbox_list[0])
+            bbox_results = self.roi_head.simple_test(
+                x, points_cat, img_metas, self.test_cfg.rcnn.sample_mod)
+            aug_bboxes.append(bbox_results)
 
         # after merging, bboxes will be rescaled to the original image size
         merged_bboxes = merge_aug_bboxes_3d(aug_bboxes, img_metas,
