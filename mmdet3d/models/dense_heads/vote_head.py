@@ -184,7 +184,8 @@ class VoteHead(nn.Module):
              pts_semantic_mask=None,
              pts_instance_mask=None,
              img_metas=None,
-             gt_bboxes_ignore=None):
+             gt_bboxes_ignore=None,
+             ret_target=False):
         """Compute loss.
 
         Args:
@@ -200,6 +201,7 @@ class VoteHead(nn.Module):
             img_metas (list[dict]): Contain pcd and img's meta info.
             gt_bboxes_ignore (None | list[torch.Tensor]): Specify
                 which bounding.
+            ret_target (Bool): Return targets or not.
 
         Returns:
             dict: Losses of Votenet.
@@ -284,6 +286,10 @@ class VoteHead(nn.Module):
             dir_res_loss=dir_res_loss,
             size_class_loss=size_class_loss,
             size_res_loss=size_res_loss)
+
+        if ret_target:
+            losses['targets'] = targets
+
         return losses
 
     def get_targets(self,

@@ -67,17 +67,21 @@ class H3DNet(TwoStage3DDetector):
             rpn_loss_inputs = (points, gt_bboxes_3d, gt_labels_3d,
                                pts_semantic_mask, pts_instance_mask, img_metas)
             rpn_losses = self.rpn_head.loss(
-                rpn_outs, *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+                rpn_outs,
+                *rpn_loss_inputs,
+                gt_bboxes_ignore=gt_bboxes_ignore,
+                ret_target=True)
+            rpn_targets = rpn_losses.pop('targets')
             losses.update(rpn_losses)
             x.update(rpn_outs)
+            x['targets'] = rpn_targets
         else:
             raise NotImplementedError
 
-        roi_preds = self.roi_head(x, self.train_cfg.rcnn.sample_mod)
-        loss_inputs = (points, gt_bboxes_3d, gt_labels_3d, pts_semantic_mask,
-                       pts_instance_mask, img_metas)
-        roi_losses = self.roi_head.loss(
-            roi_preds, *loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+        roi_losses = self.roi_head.forward_train(
+            x, self.train_cfg.rcnn.sample_mod, img_metas, points, gt_bboxes_3d,
+            gt_labels_3d, pts_semantic_mask, pts_instance_mask,
+            gt_bboxes_ignore)
         losses.update(roi_losses)
 
         return losses
