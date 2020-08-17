@@ -110,6 +110,9 @@ class H3DNet(TwoStage3DDetector):
         if self.with_rpn:
             rpn_outs = self.rpn_head(x, self.test_cfg.rpn.sample_mod)
             x.update(rpn_outs)
+            rpn_proposals = self.rpn_head.get_bboxes(
+                points, rpn_outs, img_metas, with_nms=False)
+            x['rpn_proposals'] = rpn_proposals
         else:
             raise NotImplementedError
 
