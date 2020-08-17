@@ -75,6 +75,9 @@ class H3DNet(TwoStage3DDetector):
             losses.update(rpn_losses)
             x.update(rpn_outs)
             x['targets'] = rpn_targets
+            rpn_proposals = self.rpn_head.get_bboxes(
+                points, rpn_outs, img_metas, with_nms=False)
+            x['rpn_proposals'] = rpn_proposals
         else:
             raise NotImplementedError
 

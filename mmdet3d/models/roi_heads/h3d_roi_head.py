@@ -134,7 +134,7 @@ class H3DRoIHead(Base3DRoIHead):
             sample_mod (str): Sample mode for vote aggregation layer.
                 valid modes are "vote", "seed" and "random".
             img_metas (list[dict]): Contain pcd and img's meta info.
-            points (list[torch.Tensor]): Input points.
+            points (torch.Tensor): Input points.
             rescale (bool): Whether to rescale results.
 
         Returns:
