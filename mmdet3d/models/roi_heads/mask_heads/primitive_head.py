@@ -293,7 +293,8 @@ class PrimitiveHead(nn.Module):
                                   self.primitive_mode].shape[1]
         num_seed = bbox_preds['seed_points'].shape[1]
         seed_inds = bbox_preds['seed_indices'].long()
-        seed_inds_expand = seed_inds.view(1, num_seed, 1).repeat(1, 1, 3)
+        seed_inds_expand = seed_inds.view(batch_size, num_seed,
+                                          1).repeat(1, 1, 3)
         seed_gt_votes = torch.gather(point_offset, 1, seed_inds_expand)
         seed_gt_votes += bbox_preds['seed_points']
         gt_primitive_center = seed_gt_votes.view(batch_size * num_proposal, 1,
