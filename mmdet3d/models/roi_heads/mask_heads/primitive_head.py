@@ -107,7 +107,7 @@ class PrimitiveHead(nn.Module):
         self.conv_pred.add_module('conv_out',
                                   nn.Conv1d(prev_channel, conv_out_channel, 1))
 
-        self.softmax_normal = torch.nn.Softmax(dim=1)
+        self.softmax_normal = nn.Softmax(dim=1)
 
     def init_weights(self):
         """Initialize weights of VoteHead."""
@@ -745,8 +745,10 @@ class PrimitiveHead(nn.Module):
 
     def get_primitive_center(self, pred_flag, center):
         ind_normal = self.softmax_normal(pred_flag)
-        pred_ind = (ind_normal[:, 1, :] > self.surface_thresh).detach().float()
-        sel = (ind_normal[:, 1, :] <= self.surface_thresh).detach().float()
+        pred_indices = (ind_normal[:, 1, :] >
+                        self.surface_thresh).detach().float()
+        selected = (ind_normal[:, 1, :] <=
+                    self.surface_thresh).detach().float()
         offset = torch.ones_like(center) * self.upper_thresh
-        center = center + offset * sel.unsqueeze(-1)
-        return center, pred_ind
+        center = center + offset * selected.unsqueeze(-1)
+        return center, pred_indices
