@@ -3,6 +3,7 @@ from mmcv.cnn import ConvModule
 from torch import nn as nn
 from torch.nn import functional as F
 
+from mmdet3d.core.bbox import DepthInstance3DBoxes
 from mmdet3d.core.post_processing import aligned_3d_nms
 from mmdet3d.models.builder import build_loss
 from mmdet3d.models.losses import chamfer_distance
@@ -391,6 +392,7 @@ class H3dHead(nn.Module):
         return losses
 
 
+'''
 def rotz_batch_pytorch(t):
     """Rotation about the y-axis.
 
@@ -412,7 +414,7 @@ def rotz_batch_pytorch(t):
     return output
 
 
-def get_surface_line_points_batch_pytorch(obj_size, heading_angle, center):
+def get_surface_line_center(obj_size, heading_angle, center):
     """Compute surface and line center of bounding boxes.
 
     Args:
@@ -481,6 +483,7 @@ def get_surface_line_points_batch_pytorch(obj_size, heading_angle, center):
     line_center = center.repeat(1, 12, 1) + line_3d
 
     return surface_center, line_center
+'''
 
 
 class ProposalRefineModule(nn.Module):
@@ -507,6 +510,8 @@ class ProposalRefineModule(nn.Module):
         cues_semantic_loss (dict): Config of cues semantic loss.
         proposal_objectness_loss (dict): Config of proposal objectness
             loss.
+        primitive_center_loss (dict): Config of primitive center regression
+            loss.
         conv_cfg (dict): Config of convolution in prediction layer.
         norm_cfg (dict): Config of BN in prediction layer.
     """
@@ -529,6 +534,7 @@ class ProposalRefineModule(nn.Module):
                  cues_objectness_loss=None,
                  cues_semantic_loss=None,
                  proposal_objectness_loss=None,
+                 primitive_center_loss=None,
                  conv_cfg=dict(type='Conv1d'),
                  norm_cfg=dict(type='BN1d')):
         super().__init__()
@@ -547,6 +553,7 @@ class ProposalRefineModule(nn.Module):
         self.cues_objectness_loss = build_loss(cues_objectness_loss)
         self.cues_semantic_loss = build_loss(cues_semantic_loss)
         self.proposal_objectness_loss = build_loss(proposal_objectness_loss)
+        self.primitive_center_loss = build_loss(primitive_center_loss)
 
         assert suface_matching_cfg['mlp_channels'][-1] == \
             line_matching_cfg['mlp_channels'][-1]
@@ -653,12 +660,11 @@ class ProposalRefineModule(nn.Module):
         batch_size = original_feature.shape[0]
         object_proposal = original_feature.shape[2]
 
-        # Create surface center here
         # Extract surface points and features here
-        z_sem = feat_dict['sem_cls_scores_z']
         z_center = feat_dict['pred_z_center']
-        xy_sem = feat_dict['sem_cls_scores_xy']
         xy_center = feat_dict['pred_xy_center']
+        z_sem = feat_dict['sem_cls_scores_z']
+        xy_sem = feat_dict['sem_cls_scores_xy']
 
         surface_center_pred = torch.cat((z_center, xy_center), dim=1)
         ret_dict['surface_center_pred'] = surface_center_pred
@@ -670,18 +676,24 @@ class ProposalRefineModule(nn.Module):
              surface_center_feature_pred),
             dim=1)
 
-        # Extract line points and features here
+        # Extract line points and features
         line_center = feat_dict['pred_line_center']
 
-        # Extract the object center here
-        rpn_proposals = feat_dict['rpn_proposals']
-        obj_center = rpn_proposals[:, :, :3]
-        obj_size = rpn_proposals[:, :, 3:6]
-        pred_heading = rpn_proposals[:, :, 6]
+        # Extract the surface and line centers of rpn proposals
+        rpn_proposals = feat_dict['rpn_proposals'].float()
+        rpn_proposals_bbox = DepthInstance3DBoxes(
+            rpn_proposals.reshape(-1, 7).clone(),
+            box_dim=rpn_proposals.shape[-1],
+            with_yaw=self.with_angle,
+            origin=(0.5, 0.5, 0.5))
 
         obj_surface_center, obj_line_center = \
-            get_surface_line_points_batch_pytorch(
-                obj_size, pred_heading, obj_center)
+            rpn_proposals_bbox.get_surface_line_center()
+        obj_surface_center = obj_surface_center.reshape(
+            batch_size, object_proposal * 6, 3)
+        obj_line_center = obj_line_center.reshape(batch_size,
+                                                  object_proposal * 12, 3)
+
         ret_dict['surface_center_object'] = obj_surface_center
         ret_dict['line_center_object'] = obj_line_center
 
@@ -696,42 +708,38 @@ class ProposalRefineModule(nn.Module):
         line_xyz, line_features, _ = self.match_line_center(
             line_center, line_feature, target_xyz=obj_line_center)
 
-        combine_features = torch.cat(
-            (surface_features.contiguous(), line_features.contiguous()), dim=2)
+        combine_features = torch.cat((surface_features, line_features), dim=2)
 
         match_features = self.matching_conv(combine_features)
         match_score = self.matching_pred(match_features)
-        ret_dict['match_scores'] = match_score.transpose(2, 1).contiguous()
+        ret_dict['match_scores'] = match_score.transpose(2, 1)
 
         match_features_sem = self.matching_sem_conv(combine_features)
         match_score_sem = self.matching_sem_pred(match_features_sem)
-        ret_dict['match_scores_sem'] = match_score_sem.transpose(
-            2, 1).contiguous()
+        ret_dict['match_scores_sem'] = match_score_sem.transpose(2, 1)
 
         surface_features = self.surface_feat_aggregation(surface_features)
 
         line_features = self.line_feat_aggregation(line_features)
 
         surface_features = surface_features.view(batch_size, -1, 6,
-                                                 object_proposal).contiguous()
-        line_features = line_features.view(batch_size, -1, 12,
-                                           object_proposal).contiguous()
+                                                 object_proposal)
+        line_features = line_features.view(batch_size, -1, 12, object_proposal)
 
         # Combine all surface and line features
-        surface_pool_feature = surface_features.view(
-            batch_size, -1, object_proposal).contiguous()
-        line_pool_feature = line_features.view(batch_size, -1,
-                                               object_proposal).contiguous()
+        surface_pool_feature = surface_features.view(batch_size, -1,
+                                                     object_proposal)
+        line_pool_feature = line_features.view(batch_size, -1, object_proposal)
 
         combine_feature = torch.cat((surface_pool_feature, line_pool_feature),
                                     dim=1)
 
-        net = self.proposal_pred[0](combine_feature)
-        net += original_feature
+        predictions = self.proposal_pred[0](combine_feature)
+        predictions += original_feature
         for conv_module in self.proposal_pred[1:]:
-            net = conv_module(net)
+            predictions = conv_module(predictions)
 
-        return net, ret_dict
+        return predictions, ret_dict
 
     def loss(self,
              bbox_preds,
@@ -769,7 +777,7 @@ class ProposalRefineModule(nn.Module):
 
         (cues_objectness_label, cues_sem_label, proposal_objectness_label,
          cues_mask, cues_match_mask, proposal_objectness_mask,
-         cues_matching_label, obj_surface_center, obj_line_center) = targets
+         cues_matching_label, obj_surface_line_center) = targets
 
         # match scores for each geometric primitive
         objectness_scores = preds_dict['match_scores']
@@ -799,20 +807,28 @@ class ProposalRefineModule(nn.Module):
                 torch.sum(proposal_objectness_mask) + 1e-6) * 0.5
 
         # Get the object surface center here
-        obj_size = bbox_preds[:, :, 3:6]
-        pred_heading = bbox_preds[:, :, 6]
-        obj_center = bbox_preds[:, :, 0:3]
+        batch_size, object_proposal = bbox_preds.shape[:2]
+        refined_bbox = DepthInstance3DBoxes(
+            bbox_preds.reshape(-1, 7).clone(),
+            box_dim=bbox_preds.shape[-1],
+            with_yaw=self.with_angle,
+            origin=(0.5, 0.5, 0.5))
+
         pred_obj_surface_center, pred_obj_line_center = \
-            get_surface_line_points_batch_pytorch(
-                obj_size, pred_heading, obj_center)
-        source_point = torch.cat(
+            refined_bbox.get_surface_line_center()
+        pred_obj_surface_center = pred_obj_surface_center.reshape(
+            batch_size, object_proposal * 6, 3)
+        pred_obj_line_center = pred_obj_line_center.reshape(
+            batch_size, object_proposal * 12, 3)
+        pred_surface_line_center = torch.cat(
             (pred_obj_surface_center, pred_obj_line_center), 1)
 
-        target_point = torch.cat((obj_surface_center, obj_line_center), 1)
-        dist_match = torch.sqrt(
-            torch.sum((source_point - target_point)**2, dim=-1) + 1e-6)
+        square_dist = self.primitive_center_loss(pred_surface_line_center,
+                                                 obj_surface_line_center)
+
+        match_dist = torch.sqrt(torch.sum(square_dist, dim=-1) + 1e-6)
         primitive_centroid_reg_loss = torch.sum(
-            dist_match * cues_matching_label) / (
+            match_dist * cues_matching_label) / (
                 torch.sum(cues_matching_label) + 1e-6)
 
         losses = dict(
@@ -903,8 +919,7 @@ class ProposalRefineModule(nn.Module):
 
         (cues_objectness_label, cues_sem_label, proposal_objectness_label,
          cues_mask, cues_match_mask, proposal_objectness_mask,
-         cues_matching_label,
-         obj_surface_center, obj_line_center) = multi_apply(
+         cues_matching_label, obj_surface_line_center) = multi_apply(
              self.get_targets_single, points, gt_bboxes_3d, gt_labels_3d,
              pts_semantic_mask, pts_instance_mask, aggregated_points,
              surface_center_pred, line_center_pred, surface_center_object,
@@ -917,13 +932,12 @@ class ProposalRefineModule(nn.Module):
         cues_match_mask = torch.stack(cues_match_mask)
         proposal_objectness_mask = torch.stack(proposal_objectness_mask)
         cues_matching_label = torch.stack(cues_matching_label)
-        obj_surface_center = torch.stack(obj_surface_center)
-        obj_line_center = torch.stack(obj_line_center)
+        obj_surface_line_center = torch.stack(obj_surface_line_center)
 
         return (cues_objectness_label, cues_sem_label,
                 proposal_objectness_label, cues_mask, cues_match_mask,
                 proposal_objectness_mask, cues_matching_label,
-                obj_surface_center, obj_line_center)
+                obj_surface_line_center)
 
     def get_targets_single(self,
                            points,
@@ -965,18 +979,15 @@ class ProposalRefineModule(nn.Module):
         """
         device = points.device
         gt_bboxes_3d = gt_bboxes_3d.to(device)
-        K = aggregated_points.shape[0]
+        num_proposals = aggregated_points.shape[0]
         gt_center = gt_bboxes_3d.gravity_center
-        size_label = gt_bboxes_3d.dims
-        heading_label = gt_bboxes_3d.yaw
 
         dist1, dist2, ind1, _ = chamfer_distance(
             aggregated_points.unsqueeze(0),
             gt_center.unsqueeze(0),
             reduction='none')
         # Set assignment
-        object_assignment = ind1.squeeze(
-            0)  # (B,K) with values in 0,1,...,K2-1
+        object_assignment = ind1.squeeze(0)
 
         # Generate objectness label and mask
         # objectness_label: 1 if pred object center is within
@@ -985,18 +996,17 @@ class ProposalRefineModule(nn.Module):
         # zone (DONOTCARE), 1 otherwise
         euclidean_dist1 = torch.sqrt(dist1.squeeze(0) + 1e-6)
         proposal_objectness_label = euclidean_dist1.new_zeros(
-            K, dtype=torch.long)
-        proposal_objectness_mask = euclidean_dist1.new_zeros(K)
+            num_proposals, dtype=torch.long)
+        proposal_objectness_mask = euclidean_dist1.new_zeros(num_proposals)
 
-        obj_center = gt_center[object_assignment].unsqueeze(0)
-        gt_size = size_label[object_assignment].unsqueeze(0)
-        gt_heading = heading_label[object_assignment].unsqueeze(0)
         gt_sem = gt_labels_3d[object_assignment]
 
-        # gt for primitive matching
         obj_surface_center, obj_line_center = \
-            get_surface_line_points_batch_pytorch(
-                gt_size, gt_heading, obj_center)
+            gt_bboxes_3d.get_surface_line_center()
+        obj_surface_center = obj_surface_center.reshape(
+            6, -1, 3)[:, object_assignment].reshape(1, -1, 3)
+        obj_line_center = obj_line_center.reshape(
+            12, -1, 3)[:, object_assignment].reshape(1, -1, 3)
 
         surface_sem = torch.argmax(pred_surface_sem, dim=1).float()
         line_sem = torch.argmax(pred_line_sem, dim=1).float()
@@ -1019,15 +1029,17 @@ class ProposalRefineModule(nn.Module):
         euclidean_dist_surface = torch.sqrt(dist_surface.squeeze(0) + 1e-6)
         euclidean_dist_line = torch.sqrt(dist_line.squeeze(0) + 1e-6)
         objectness_label_surface = euclidean_dist_line.new_zeros(
-            K * 6, dtype=torch.long)
-        objectness_mask_surface = euclidean_dist_line.new_zeros(K * 6)
+            num_proposals * 6, dtype=torch.long)
+        objectness_mask_surface = euclidean_dist_line.new_zeros(num_proposals *
+                                                                6)
         objectness_label_line = euclidean_dist_line.new_zeros(
-            K * 12, dtype=torch.long)
-        objectness_mask_line = euclidean_dist_line.new_zeros(K * 12)
+            num_proposals * 12, dtype=torch.long)
+        objectness_mask_line = euclidean_dist_line.new_zeros(num_proposals *
+                                                             12)
         objectness_label_surface_sem = euclidean_dist_line.new_zeros(
-            K * 6, dtype=torch.long)
+            num_proposals * 6, dtype=torch.long)
         objectness_label_line_sem = euclidean_dist_line.new_zeros(
-            K * 12, dtype=torch.long)
+            num_proposals * 12, dtype=torch.long)
 
         euclidean_dist_obj_surface = torch.sqrt(
             torch.sum((pred_obj_surface_center - surface_sel)**2, dim=-1) +
@@ -1086,13 +1098,14 @@ class ProposalRefineModule(nn.Module):
         objectness_label_surface_sem *= objectness_label_surface_obj
         objectness_label_line_sem *= objectness_label_line_obj
 
-        cues_match_mask = (torch.sum(cues_objectness_label.view(18, K), dim=0)
-                           >= 1).float()
+        cues_match_mask = (torch.sum(
+            cues_objectness_label.view(18, num_proposals), dim=0) >=
+                           1).float()
 
-        obj_surface_center = obj_surface_center.squeeze(0)
-        obj_line_center = obj_line_center.squeeze(0)
+        obj_surface_line_center = torch.cat(
+            (obj_surface_center, obj_line_center), 1).squeeze(0)
 
         return (cues_objectness_label, cues_sem_label,
                 proposal_objectness_label, cues_mask, cues_match_mask,
                 proposal_objectness_mask, cues_matching_label,
-                obj_surface_center, obj_line_center)
+                obj_surface_line_center)

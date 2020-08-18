@@ -64,6 +64,8 @@ class H3DNet(TwoStage3DDetector):
         losses = dict()
         if self.with_rpn:
             rpn_outs = self.rpn_head(x, self.train_cfg.rpn.sample_mod)
+            x.update(rpn_outs)
+
             rpn_loss_inputs = (points, gt_bboxes_3d, gt_labels_3d,
                                pts_semantic_mask, pts_instance_mask, img_metas)
             rpn_losses = self.rpn_head.loss(
@@ -73,8 +75,9 @@ class H3DNet(TwoStage3DDetector):
                 ret_target=True)
             rpn_targets = rpn_losses.pop('targets')
             losses.update(rpn_losses)
-            x.update(rpn_outs)
+
             x['targets'] = rpn_targets
+            # Generate rpn proposals
             rpn_proposals = self.rpn_head.get_bboxes(
                 points, rpn_outs, img_metas, with_nms=False)
             x['rpn_proposals'] = rpn_proposals
@@ -110,31 +113,48 @@ class H3DNet(TwoStage3DDetector):
         if self.with_rpn:
             rpn_outs = self.rpn_head(x, self.test_cfg.rpn.sample_mod)
             x.update(rpn_outs)
+            # Generate rpn proposals
             rpn_proposals = self.rpn_head.get_bboxes(
                 points, rpn_outs, img_metas, with_nms=False)
             x['rpn_proposals'] = rpn_proposals
         else:
             raise NotImplementedError
 
-        return self.roi_head.simple_test(x, self.test_cfg.rcnn.sample_mod,
-                                         img_metas, points_cat)
+        return self.roi_head.simple_test(
+            x,
+            self.test_cfg.rcnn.sample_mod,
+            img_metas,
+            points_cat,
+            rescale=rescale)
 
     def aug_test(self, points, img_metas, imgs=None, rescale=False):
         """Test with augmentation."""
         points_cat = [torch.stack(pts) for pts in points]
         feats = self.extract_feats(points_cat, img_metas)
+        for x in feats:
+            x['fp_xyz'] = [x['fp_xyz_net0'][-1]]
+            x['fp_features'] = [x['hd_feature']]
+            x['fp_indices'] = [x['fp_indices_net0'][-1]]
 
         # only support aug_test for one sample
         aug_bboxes = []
         for x, pts_cat, img_meta in zip(feats, points_cat, img_metas):
             if self.with_rpn:
-                rpn_outs = self.rpn_head(x, self.train_cfg.rpn.sample_mod)
+                rpn_outs = self.rpn_head(x, self.test_cfg.rpn.sample_mod)
                 x.update(rpn_outs)
+                # Generate rpn proposals
+                rpn_proposals = self.rpn_head.get_bboxes(
+                    points, rpn_outs, img_metas, with_nms=False)
+                x['rpn_proposals'] = rpn_proposals
             else:
                 raise NotImplementedError
 
             bbox_results = self.roi_head.simple_test(
-                x, self.test_cfg.rcnn.sample_mod, img_metas, points_cat)
+                x,
+                self.test_cfg.rcnn.sample_mod,
+                img_meta,
+                pts_cat,
+                rescale=rescale)
             aug_bboxes.append(bbox_results)
 
         # after merging, bboxes will be rescaled to the original image size
@@ -142,3 +162,10 @@ class H3DNet(TwoStage3DDetector):
                                             self.bbox_head.test_cfg)
 
         return merged_bboxes
+
+    def extract_feats(self, points, img_metas):
+        """Extract features of multiple samples."""
+        return [
+            self.extract_feat(pts, img_meta)
+            for pts, img_meta in zip(points, img_metas)
+        ]
