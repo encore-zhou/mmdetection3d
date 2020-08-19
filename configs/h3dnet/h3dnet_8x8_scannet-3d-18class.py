@@ -41,11 +41,17 @@ primitive_z_cfg = dict(
     center_loss=dict(
         type='ChamferDistance',
         mode='l1',
-        reduction='none',
+        reduction='sum',
         loss_src_weight=0.5,
         loss_dst_weight=0.5),
-    semantic_loss=dict(
-        type='CrossEntropyLoss', reduction='none', loss_weight=1.0),
+    semantic_reg_loss=dict(
+        type='ChamferDistance',
+        mode='l1',
+        reduction='sum',
+        loss_src_weight=0.5,
+        loss_dst_weight=0.5),
+    semantic_cls_loss=dict(
+        type='CrossEntropyLoss', reduction='sum', loss_weight=1.0),
     train_cfg=dict(
         dist_thresh=0.2,
         var_thresh=1e-2,
@@ -92,11 +98,17 @@ primitive_xy_cfg = dict(
     center_loss=dict(
         type='ChamferDistance',
         mode='l1',
-        reduction='none',
+        reduction='sum',
         loss_src_weight=0.5,
         loss_dst_weight=0.5),
-    semantic_loss=dict(
-        type='CrossEntropyLoss', reduction='none', loss_weight=1.0),
+    semantic_reg_loss=dict(
+        type='ChamferDistance',
+        mode='l1',
+        reduction='sum',
+        loss_src_weight=0.5,
+        loss_dst_weight=0.5),
+    semantic_cls_loss=dict(
+        type='CrossEntropyLoss', reduction='sum', loss_weight=1.0),
     train_cfg=dict(
         dist_thresh=0.2,
         var_thresh=1e-2,
@@ -143,11 +155,17 @@ primitive_line_cfg = dict(
     center_loss=dict(
         type='ChamferDistance',
         mode='l1',
-        reduction='none',
+        reduction='sum',
         loss_src_weight=1.0,
         loss_dst_weight=1.0),
-    semantic_loss=dict(
-        type='CrossEntropyLoss', reduction='none', loss_weight=2.0),
+    semantic_reg_loss=dict(
+        type='ChamferDistance',
+        mode='l1',
+        reduction='sum',
+        loss_src_weight=1.0,
+        loss_dst_weight=1.0),
+    semantic_cls_loss=dict(
+        type='CrossEntropyLoss', reduction='sum', loss_weight=2.0),
     train_cfg=dict(
         dist_thresh=0.2,
         var_thresh=1e-2,

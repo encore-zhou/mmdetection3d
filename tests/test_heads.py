@@ -500,11 +500,17 @@ def test_primitive_head():
         center_loss=dict(
             type='ChamferDistance',
             mode='l1',
-            reduction='none',
+            reduction='sum',
             loss_src_weight=1.0,
             loss_dst_weight=1.0),
-        semantic_loss=dict(
-            type='CrossEntropyLoss', reduction='none', loss_weight=1.0),
+        semantic_reg_loss=dict(
+            type='ChamferDistance',
+            mode='l1',
+            reduction='sum',
+            loss_src_weight=1.0,
+            loss_dst_weight=1.0),
+        semantic_cls_loss=dict(
+            type='CrossEntropyLoss', reduction='sum', loss_weight=1.0),
         train_cfg=dict(
             dist_thresh=0.2,
             var_thresh=1e-2,
@@ -558,7 +564,6 @@ def test_primitive_head():
     assert losses_dict['center_loss_z'] >= 0
     assert losses_dict['size_loss_z'] >= 0
     assert losses_dict['sem_loss_z'] >= 0
-    assert losses_dict['surface_loss_z'] >= 0
 
 
 def test_h3d_head():
