@@ -152,7 +152,7 @@ def test_multi_backbone():
         cfg_dict['suffixes'] = ['net0', 'net1', 'net2']
         build_backbone(cfg_dict)
 
-    # Type of 'backbones' should be Dict or List[Dict].
+    # Type of 'backbones' should be Dict or List[Dict]
     with pytest.raises(AssertionError):
         cfg_dict['backbones'] = 'PointNet2SASSG'
         build_backbone(cfg_dict)

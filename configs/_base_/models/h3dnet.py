@@ -1,6 +1,6 @@
 primitive_z_cfg = dict(
     type='PrimitiveHead',
-    num_dim=2,
+    num_dims=2,
     num_classes=18,
     primitive_mode='z',
     upper_thresh=100.0,
@@ -57,7 +57,7 @@ primitive_z_cfg = dict(
 
 primitive_xy_cfg = dict(
     type='PrimitiveHead',
-    num_dim=1,
+    num_dims=1,
     num_classes=18,
     primitive_mode='xy',
     upper_thresh=100.0,
@@ -114,7 +114,7 @@ primitive_xy_cfg = dict(
 
 primitive_line_cfg = dict(
     type='PrimitiveHead',
-    num_dim=0,
+    num_dims=0,
     num_classes=18,
     primitive_mode='line',
     upper_thresh=100.0,
