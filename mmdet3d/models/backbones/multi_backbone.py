@@ -9,16 +9,16 @@ from mmdet.models import BACKBONES, build_backbone
 
 @BACKBONES.register_module()
 class MultiBackbone(nn.Module):
-    """MultiBackbone with different config. '''.
+    """MultiBackbone with different configs.
 
     Args:
         num_streams (int): The number of backbones.
         backbones (list or dict): A list of backbone configs.
         aggregation_mlp_channels (list[int]): Specify the mlp layers
             for feature aggregation.
-        conv_cfg (dict): Config dict of convolutional layers
-        norm_cfg (dict): Config dict of normalization layers
-        act_cfg (dict): Config dict of activation layers
+        conv_cfg (dict): Config dict of convolutional layers.
+        norm_cfg (dict): Config dict of normalization layers.
+        act_cfg (dict): Config dict of activation layers.
         suffixes (list): A list of suffixes to rename the return dict
             for each backbone.
     """
@@ -93,7 +93,7 @@ class MultiBackbone(nn.Module):
                 with shape (B, N, 3 + input_feature_dim).
 
         Returns:
-            dict[str, list[torch.Tensor]]: Outputs after SA and FP modules.
+            dict[str, list[torch.Tensor]]: Outputs from multiple backbones.
 
                 - fp_xyz[suffix] (list[torch.Tensor]): The coordinates of
                     each fp features.
@@ -115,7 +115,7 @@ class MultiBackbone(nn.Module):
                     cur_ret[k + '_' + cur_suffix] = cur_ret.pop(k)
             ret.update(cur_ret)
 
-        # Combine the feature here
+        # Combine the features here
         hd_feature = torch.cat(fp_features, dim=1)
         hd_feature = self.aggregation_layers(hd_feature)
         ret['hd_feature'] = hd_feature
