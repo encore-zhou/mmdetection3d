@@ -347,8 +347,8 @@ class H3DBboxHead(nn.Module):
         heading_label_one_hot = dir_class_targets.new_zeros(
             (batch_size, proposal_num, self.num_dir_bins))
         heading_label_one_hot.scatter_(2, dir_class_targets.unsqueeze(-1), 1)
-        dir_res_norm = torch.sum(
-            bbox_preds['dir_res_norm' + suffix] * heading_label_one_hot, -1)
+        dir_res_norm = (bbox_preds['dir_res_norm' + suffix] *
+                        heading_label_one_hot).sum(dim=-1)
         dir_res_loss = self.dir_res_loss(
             dir_res_norm, dir_res_targets, weight=box_loss_weights)
 
@@ -364,9 +364,8 @@ class H3DBboxHead(nn.Module):
         one_hot_size_targets.scatter_(2, size_class_targets.unsqueeze(-1), 1)
         one_hot_size_targets_expand = one_hot_size_targets.unsqueeze(
             -1).repeat(1, 1, 1, 3)
-        size_residual_norm = torch.sum(
-            bbox_preds['size_res_norm' + suffix] * one_hot_size_targets_expand,
-            2)
+        size_residual_norm = (bbox_preds['size_res_norm' + suffix] *
+                              one_hot_size_targets_expand).sum(dim=2)
         box_loss_weights_expand = box_loss_weights.unsqueeze(-1).repeat(
             1, 1, 3)
         size_res_loss = self.size_res_loss(
@@ -703,12 +702,12 @@ class ProposalRefineModule(nn.Module):
         objectness_scores = preds_dict['obj_scores_optimized']
         objectness_loss_refine = self.proposal_objectness_loss(
             objectness_scores.transpose(2, 1), proposal_objectness_label)
-        primitive_matching_loss = torch.sum(
-            objectness_loss_refine *
-            cues_match_mask) / (torch.sum(cues_match_mask) + 1e-6) * 0.5
-        primitive_sem_matching_loss = torch.sum(
-            objectness_loss_refine * proposal_objectness_mask) / (
-                torch.sum(proposal_objectness_mask) + 1e-6) * 0.5
+        primitive_matching_loss = (objectness_loss_refine *
+                                   cues_match_mask).sum() / (
+                                       cues_match_mask.sum() + 1e-6) * 0.5
+        primitive_sem_matching_loss = (
+            objectness_loss_refine * proposal_objectness_mask).sum() / (
+                proposal_objectness_mask.sum() + 1e-6) * 0.5
 
         # Get the object surface center here
         batch_size, object_proposal = bbox_preds.shape[:2]
@@ -730,10 +729,10 @@ class ProposalRefineModule(nn.Module):
         square_dist = self.primitive_center_loss(pred_surface_line_center,
                                                  obj_surface_line_center)
 
-        match_dist = torch.sqrt(torch.sum(square_dist, dim=-1) + 1e-6)
+        match_dist = torch.sqrt(square_dist.sum(dim=-1) + 1e-6)
         primitive_centroid_reg_loss = torch.sum(
             match_dist * cues_matching_label) / (
-                torch.sum(cues_matching_label) + 1e-6)
+                cues_matching_label.sum() + 1e-6)
 
         losses = dict(
             primitive_objectness_loss=primitive_objectness_loss,
@@ -945,9 +944,8 @@ class ProposalRefineModule(nn.Module):
         objectness_label_line_sem = euclidean_dist_line.new_zeros(
             num_proposals * 12, dtype=torch.long)
 
-        euclidean_dist_obj_surface = torch.sqrt(
-            torch.sum((pred_obj_surface_center - surface_sel)**2, dim=-1) +
-            1e-6)
+        euclidean_dist_obj_surface = torch.sqrt((
+            (pred_obj_surface_center - surface_sel)**2).sum(dim=-1) + 1e-6)
         euclidean_dist_obj_line = torch.sqrt(
             torch.sum((pred_obj_line_center - line_sel)**2, dim=-1) + 1e-6)
 
