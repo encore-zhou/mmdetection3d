@@ -1204,6 +1204,3 @@ def test_points_cam2img():
                                           [0.6994, 0.7782], [0.5623, 0.6303],
                                           [0.4359, 0.6532]])
     assert torch.allclose(point_2d_res, expected_point_2d_res, 1e-3)
-
-
-test_depth_boxes3d()
