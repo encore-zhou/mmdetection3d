@@ -402,7 +402,7 @@ class PrimitiveHead(nn.Module):
 
             # Get lower four lines
             if self.primitive_mode == 'line':
-                point2_lines_matching = self.match_point2line(
+                point2line_matching = self.match_point2line(
                     coords[selected], xmin, xmax, ymin, ymax)
 
                 point_mask, point_offset, point_sem = \
@@ -412,7 +412,7 @@ class PrimitiveHead(nn.Module):
                                                         coords[selected],
                                                         indices[selected],
                                                         cur_cls_label,
-                                                        point2_lines_matching,
+                                                        point2line_matching,
                                                         cur_corners,
                                                         [1, 1, 0, 0])
 
@@ -437,7 +437,7 @@ class PrimitiveHead(nn.Module):
 
             # Get upper four lines
             if self.primitive_mode == 'line':
-                point2_lines_matching = self.match_point2line(
+                point2line_matching = self.match_point2line(
                     coords[selected], xmin, xmax, ymin, ymax)
 
                 point_mask, point_offset, point_sem = \
@@ -447,7 +447,7 @@ class PrimitiveHead(nn.Module):
                                                         coords[selected],
                                                         indices[selected],
                                                         cur_cls_label,
-                                                        point2_lines_matching,
+                                                        point2line_matching,
                                                         cur_corners,
                                                         [1, 1, 0, 0])
 
@@ -769,7 +769,7 @@ class PrimitiveHead(nn.Module):
 
     def _assign_primitive_line_targets(self, point_mask, point_offset,
                                        point_sem, coords, indices, cls_label,
-                                       point2_lines_matching, corners,
+                                       point2line_matching, corners,
                                        center_axises):
         """Generate targets of line primitive.
 
@@ -783,7 +783,7 @@ class PrimitiveHead(nn.Module):
             coords (torch.Tensor): The selected points.
             indices (torch.Tensor): Indices of the selected points.
             cls_label (int): Class label of the ground truth bounding box.
-            point2_lines_matching (torch.Tensor): Flag indicate that
+            point2line_matching (torch.Tensor): Flag indicate that
                 matching line of each point.
             corners (torch.Tensor): Corners of the ground truth bounding box.
             center_axises (list[int]): Indicate in which axis the line center
@@ -792,7 +792,7 @@ class PrimitiveHead(nn.Module):
         Returns:
             Tuple: Targets of the line primitive.
         """
-        for line_select, center_axis in zip(point2_lines_matching,
+        for line_select, center_axis in zip(point2line_matching,
                                             center_axises):
             if line_select.sum() > self.train_cfg['num_point_line']:
                 point_mask[indices[line_select]] = 1.0

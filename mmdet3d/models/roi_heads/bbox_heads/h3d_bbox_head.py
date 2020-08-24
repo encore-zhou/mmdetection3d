@@ -129,7 +129,7 @@ class H3DBboxHead(nn.Module):
             norm_cfg=norm_cfg,
             bias=True,
             inplace=True)
-        self.matching_pred = torch.nn.Conv1d(matching_feat_dims, 2, 1)
+        self.matching_pred = nn.Conv1d(matching_feat_dims, 2, 1)
 
         # Compute the semantic matching scores
         self.semantic_matching_conv = ConvModule(
@@ -141,7 +141,7 @@ class H3DBboxHead(nn.Module):
             norm_cfg=norm_cfg,
             bias=True,
             inplace=True)
-        self.semantic_matching_pred = torch.nn.Conv1d(matching_feat_dims, 2, 1)
+        self.semantic_matching_pred = nn.Conv1d(matching_feat_dims, 2, 1)
 
         # Surface feature aggregation
         self.surface_feats_aggregation = list()
