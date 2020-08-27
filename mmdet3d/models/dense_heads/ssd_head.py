@@ -288,8 +288,8 @@ class SSD3DHead(nn.Module):
             (batch_size, proposal_num, self.num_dir_bins))
         heading_label_one_hot.scatter_(2, dir_class_targets.unsqueeze(-1), 1)
 
-        dir_res_norm = torch.sum(
-            bbox_preds['dir_res_norm'] * heading_label_one_hot, -1)
+        dir_res_norm = torch.sum(bbox_preds['dir_res'] * heading_label_one_hot,
+                                 -1)
         dir_res_loss = self.dir_res_loss(
             dir_res_norm, dir_res_targets, weight=box_loss_weights)
 
@@ -325,7 +325,10 @@ class SSD3DHead(nn.Module):
             dir_res_loss=dir_res_loss,
             size_res_loss=size_loss,
             corner_loss=corner_loss,
-            vote_loss=vote_loss)
+            vote_loss=vote_loss,
+            positive_sample=positive_mask.sum().float(),
+            centerness_pred=centerness_targets[positive_mask].mean(),
+            vote_offset=vote_targets[vote_mask != 0].abs().mean())
         return losses
 
     def get_targets(self,
@@ -394,7 +397,7 @@ class SSD3DHead(nn.Module):
 
         centerness_weights = (positive_mask +
                               negative_mask).unsqueeze(-1).repeat(
-                                  1, 1, self.num_classes)
+                                  1, 1, self.num_classes).float()
         centerness_weights = centerness_weights / \
             (centerness_weights.sum() + 1e-6)
         vote_mask = vote_mask / (vote_mask.sum() + 1e-6)
@@ -433,9 +436,7 @@ class SSD3DHead(nn.Module):
             tuple[torch.Tensor]: Targets of vote head.
         """
         assert self.bbox_coder.with_rot or pts_semantic_mask is not None
-
         gt_bboxes_3d = gt_bboxes_3d.to(points.device)
-
         valid_gt = gt_labels_3d != -1
         gt_bboxes_3d = gt_bboxes_3d[valid_gt]
         gt_labels_3d = gt_labels_3d[valid_gt]
@@ -461,15 +462,31 @@ class SSD3DHead(nn.Module):
 
         # Centerness loss targets
         canonical_xyz = aggregated_points - center_targets
+        # TO-DO
+        # LiDARInstance3DBoxes and DepthInstance3DBoxes
+        # rotate in different direction
         canonical_xyz = rotation_3d_in_axis(
             canonical_xyz.unsqueeze(0).transpose(0, 1),
-            gt_bboxes_3d.yaw[assignment], 2).squeeze(1)
-        distance_front = size_res_targets[:, 0] - canonical_xyz[:, 0]
-        distance_back = size_res_targets[:, 0] + canonical_xyz[:, 0]
-        distance_left = size_res_targets[:, 1] + canonical_xyz[:, 1]
-        distance_right = size_res_targets[:, 1] - canonical_xyz[:, 1]
-        distance_bottom = canonical_xyz[:, 2]
-        distance_top = size_res_targets[:, 2] * 2 - canonical_xyz[:, 2]
+            -gt_bboxes_3d.yaw[assignment], 2).squeeze(1)
+        distance_front = torch.clamp(
+            size_res_targets[:, 0] - canonical_xyz[:, 0], min=0)
+        distance_back = torch.clamp(
+            size_res_targets[:, 0] + canonical_xyz[:, 0], min=0)
+        distance_left = torch.clamp(
+            size_res_targets[:, 1] - canonical_xyz[:, 1], min=0)
+        distance_right = torch.clamp(
+            size_res_targets[:, 1] + canonical_xyz[:, 1], min=0)
+        distance_top = torch.clamp(
+            size_res_targets[:, 2] - canonical_xyz[:, 2], min=0)
+        distance_bottom = torch.clamp(
+            size_res_targets[:, 2] + canonical_xyz[:, 2], min=0)
+        # assert (distance_front[positive_mask] < 0).sum() == 0
+        # assert (distance_back[positive_mask] < 0).sum() == 0
+        # assert (distance_left[positive_mask] < 0).sum() == 0
+        # assert (distance_right[positive_mask] < 0).sum() == 0
+        # assert (distance_bottom[positive_mask] < 0).sum() == 0
+        # assert (distance_top[positive_mask] < 0).sum() == 0
+
         centerness_l = torch.min(distance_front, distance_back) / torch.max(
             distance_front, distance_back)
         centerness_w = torch.min(distance_left, distance_right) / torch.max(
@@ -481,7 +498,6 @@ class SSD3DHead(nn.Module):
         centerness_targets = centerness_targets.pow(1 / 3.0)
         centerness_targets = torch.clamp(centerness_targets, min=0, max=1)
 
-        # Corner loss targets
         proposal_num = centerness_targets.shape[0]
         one_hot_centerness_targets = centerness_targets.new_zeros(
             (proposal_num, self.num_classes))
@@ -494,7 +510,7 @@ class SSD3DHead(nn.Module):
             self.train_cfg.expand_dims_length)
         vote_mask, vote_assignment = self._assign_targets_by_points_inside(
             enlarged_gt_bboxes_3d, seed_points)
-        vote_targets = enlarged_gt_bboxes_3d.center
+        vote_targets = enlarged_gt_bboxes_3d.gravity_center
         vote_targets = vote_targets[vote_assignment] - seed_points
         vote_mask = vote_mask.max(1)[0] > 0
 
@@ -553,7 +569,7 @@ class SSD3DHead(nn.Module):
             bbox,
             box_dim=bbox.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
-            origin=(0.5, 0.5, 0))
+            origin=(0.5, 0.5, 0.5))
 
         if isinstance(bbox, LiDARInstance3DBoxes):
             box_idx = bbox.points_in_boxes(points)

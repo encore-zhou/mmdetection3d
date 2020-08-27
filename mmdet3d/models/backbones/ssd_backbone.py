@@ -1,4 +1,5 @@
 import torch
+from mmcv.cnn import ConvModule
 from mmcv.runner import load_checkpoint
 from torch import nn as nn
 
@@ -88,13 +89,17 @@ class SSDSAMSG(nn.Module):
                     norm_cfg=norm_cfg,
                     use_xyz=use_xyz,
                     pool_mod=pool_mod,
-                    normalize_xyz=normalize_xyz))
+                    normalize_xyz=normalize_xyz,
+                    bias=True))
             skip_channel_list.append(sa_out_channel)
             self.aggregation_mlps.append(
-                nn.Conv1d(
+                ConvModule(
                     sa_out_channel,
                     aggregation_channels[sa_index],
-                    kernel_size=1))
+                    conv_cfg=dict(type='Conv1d'),
+                    norm_cfg=dict(type='BN1d'),
+                    kernel_size=1,
+                    bias=True))
             sa_in_channel = aggregation_channels[sa_index]
 
     def init_weights(self, pretrained=None):

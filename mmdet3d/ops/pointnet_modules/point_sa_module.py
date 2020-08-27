@@ -42,7 +42,8 @@ class PointSAModuleMSG(nn.Module):
                  norm_cfg: dict = dict(type='BN2d'),
                  use_xyz: bool = True,
                  pool_mod='max',
-                 normalize_xyz: bool = False):
+                 normalize_xyz: bool = False,
+                 bias='auto'):
         super().__init__()
 
         assert len(radii) == len(sample_nums) == len(mlp_channels)
@@ -95,7 +96,8 @@ class PointSAModuleMSG(nn.Module):
                         kernel_size=(1, 1),
                         stride=(1, 1),
                         conv_cfg=dict(type='Conv2d'),
-                        norm_cfg=norm_cfg))
+                        norm_cfg=norm_cfg,
+                        bias=bias))
             self.mlps.append(mlp)
 
     def forward(
@@ -273,15 +275,15 @@ def calc_square_dist(point_feat_a, point_feat_b, norm=True):
     Returns:
         Tensor: (B, N, M) Distance between each pair points.
     """
-    n = point_feat_a.shape[1]
-    m = point_feat_b.shape[1]
+    length_a = point_feat_a.shape[1]
+    length_b = point_feat_b.shape[1]
     num_channel = point_feat_a.shape[-1]
-    a_square = point_feat_a.unsqueeze(dim=2)  # [bs, n, 1, c]
-    b_square = point_feat_b.unsqueeze(dim=1)  # [bs, 1, m, c]
-    a_square = torch.sum(a_square * a_square, dim=-1)  # [bs, n, 1]
-    b_square = torch.sum(b_square * b_square, dim=-1)  # [bs, 1, m]
-    a_square = a_square.repeat((1, 1, m))  # [bs, n, m]
-    b_square = b_square.repeat((1, n, 1))  # [bs, n, m]
+    # [bs, n, 1]
+    a_square = torch.sum(point_feat_a.unsqueeze(dim=2).pow(2), dim=-1)
+    # [bs, 1, m]
+    b_square = torch.sum(point_feat_b.unsqueeze(dim=1).pow(2), dim=-1)
+    a_square = a_square.repeat((1, 1, length_b))  # [bs, n, m]
+    b_square = b_square.repeat((1, length_a, 1))  # [bs, n, m]
 
     coor = torch.matmul(point_feat_a, point_feat_b.transpose(1, 2))
 

@@ -31,7 +31,7 @@ class AnchorFreeBBoxCoder(BaseBBoxCoder):
             tuple: Targets of center, size and direction.
         """
         # generate center target
-        center_target = gt_bboxes_3d.center
+        center_target = gt_bboxes_3d.gravity_center
 
         # generate bbox size target
         size_res_target = gt_bboxes_3d.dims / 2

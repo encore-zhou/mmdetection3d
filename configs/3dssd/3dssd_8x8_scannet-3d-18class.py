@@ -1,7 +1,4 @@
-_base_ = [
-    '../_base_/models/3dssd.py', '../_base_/schedules/schedule_3x.py',
-    '../_base_/default_runtime.py'
-]
+_base_ = ['../_base_/models/3dssd.py', '../_base_/default_runtime.py']
 
 # dataset settings
 dataset_type = 'KittiDataset'
@@ -125,7 +122,7 @@ data = dict(
         test_mode=True,
         box_type_3d='LiDAR'))
 
-evaluation = dict(interval=1)
+evaluation = dict(interval=10)
 
 # model settings
 model = dict(
