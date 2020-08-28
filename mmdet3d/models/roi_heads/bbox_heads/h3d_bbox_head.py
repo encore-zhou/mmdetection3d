@@ -515,7 +515,7 @@ class H3DBboxHead(nn.Module):
         minmax_box3d[:, :3] = torch.min(corner3d, dim=1)[0]
         minmax_box3d[:, 3:] = torch.max(corner3d, dim=1)[0]
 
-        nonempty_box_mask = box_indices.T.sum(1) > 5
+        nonempty_box_mask = box_indices.T.sum(1) >= 5
 
         bbox_classes = torch.argmax(sem_scores, -1)
         nms_selected = aligned_3d_nms(minmax_box3d[nonempty_box_mask],
