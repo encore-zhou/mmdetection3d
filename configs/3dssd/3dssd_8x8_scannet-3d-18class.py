@@ -4,7 +4,7 @@ _base_ = ['../_base_/models/3dssd.py', '../_base_/default_runtime.py']
 dataset_type = 'KittiDataset'
 data_root = 'data/kitti/'
 class_names = ['Car']
-point_cloud_range = [0, -40, -3, 70.4, 40, 1]
+point_cloud_range = [0, -40, -5, 70, 40, 3]
 input_modality = dict(use_lidar=True, use_camera=False)
 db_sampler = dict(
     data_root=data_root,
@@ -43,7 +43,7 @@ train_pipeline = [
     dict(
         type='GlobalRotScaleTrans',
         rot_range=[-0.78539816, 0.78539816],
-        scale_ratio_range=[0.95, 1.05]),
+        scale_ratio_range=[0.9, 1.1]),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='IndoorPointSample', num_points=16384),
@@ -57,7 +57,6 @@ test_pipeline = [
         load_dim=4,
         use_dim=4,
         file_client_args=file_client_args),
-    dict(type='IndoorPointSample', num_points=16384),
     dict(
         type='MultiScaleFlipAug3D',
         img_scale=(1333, 800),
@@ -72,6 +71,7 @@ test_pipeline = [
             dict(type='RandomFlip3D'),
             dict(
                 type='PointsRangeFilter', point_cloud_range=point_cloud_range),
+            dict(type='IndoorPointSample', num_points=16384),
             dict(
                 type='DefaultFormatBundle3D',
                 class_names=class_names,

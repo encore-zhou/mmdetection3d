@@ -317,7 +317,8 @@ class SSD3DHead(nn.Module):
             bbox_preds['candidate_offset'].transpose(1, 2),
             vote_targets,
             weight=vote_mask.unsqueeze(-1))
-
+        # import pdb
+        # pdb.set_trace()
         losses = dict(
             centerness_loss=centerness_loss,
             center_loss=center_loss,
@@ -327,7 +328,11 @@ class SSD3DHead(nn.Module):
             corner_loss=corner_loss,
             vote_loss=vote_loss,
             positive_sample=positive_mask.sum().float(),
-            centerness_pred=centerness_targets[positive_mask].mean(),
+            centerness_cnt=(bbox_preds['obj_scores'].transpose(2, 1).sigmoid()
+                            > 0.3).sum().float(),
+            centerness_error=(
+                bbox_preds['obj_scores'].transpose(2, 1).sigmoid() -
+                centerness_targets)[positive_mask].abs().mean(),
             vote_offset=vote_targets[vote_mask != 0].abs().mean())
         return losses
 
@@ -535,7 +540,9 @@ class SSD3DHead(nn.Module):
         sem_scores = F.sigmoid(bbox_preds['obj_scores']).transpose(1, 2)
         obj_scores = sem_scores.max(-1)[0]
         bbox3d = self.bbox_coder.decode(bbox_preds)
-
+        # print(sem_scores.max(), (sem_scores > 0.3).sum())
+        # import pdb
+        # pdb.set_trace()
         batch_size = bbox3d.shape[0]
         results = list()
         for b in range(batch_size):

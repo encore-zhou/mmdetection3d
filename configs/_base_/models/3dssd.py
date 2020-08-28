@@ -52,7 +52,7 @@ model = dict(
 train_cfg = dict(pos_distance_thr=10.0, expand_dims_length=0.1)
 test_cfg = dict(
     nms_thr=0.1,
-    score_thr=0.3,
+    score_thr=0.1,
     per_class_proposal=True,
     max_translate_range=(3.0, 3.0, 2.0))
 
