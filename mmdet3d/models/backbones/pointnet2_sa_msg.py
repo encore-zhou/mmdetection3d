@@ -8,7 +8,7 @@ from mmdet.models import BACKBONES
 
 
 @BACKBONES.register_module()
-class SSDSAMSG(nn.Module):
+class PointNet2SAMSG(nn.Module):
     """PointNet2 with Multi-scale grouping.
 
     Args:

@@ -1,7 +1,7 @@
 model = dict(
     type='SSD3DNet',
     backbone=dict(
-        type='SSDSAMSG',
+        type='PointNet2SAMSG',
         in_channels=4,
         num_points=(4096, 512, (256, 256)),
         radius=((0.2, 0.4, 0.8), (0.4, 0.8, 1.6), (1.6, 3.2, 4.8)),

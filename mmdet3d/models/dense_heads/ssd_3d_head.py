@@ -262,7 +262,7 @@ class SSD3DHead(nn.Module):
         (vote_targets, center_targets, size_res_targets, dir_class_targets,
          dir_res_targets, mask_targets, centerness_targets, corner3d_targets,
          vote_mask, positive_mask, negative_mask, centerness_weights,
-         box_loss_weights) = targets
+         box_loss_weights, heading_res_loss_weight) = targets
 
         # calculate centerness loss
         centerness_loss = self.objectness_loss(
@@ -283,15 +283,10 @@ class SSD3DHead(nn.Module):
             weight=box_loss_weights)
 
         # calculate direction residual loss
-        batch_size, proposal_num = dir_class_targets.shape[:2]
-        heading_label_one_hot = dir_class_targets.new_zeros(
-            (batch_size, proposal_num, self.num_dir_bins))
-        heading_label_one_hot.scatter_(2, dir_class_targets.unsqueeze(-1), 1)
-
-        dir_res_norm = torch.sum(bbox_preds['dir_res'] * heading_label_one_hot,
-                                 -1)
         dir_res_loss = self.dir_res_loss(
-            dir_res_norm, dir_res_targets, weight=box_loss_weights)
+            bbox_preds['dir_res'],
+            dir_res_targets.unsqueeze(-1).repeat(1, 1, self.num_dir_bins),
+            weight=heading_res_loss_weight)
 
         # calculate size residual loss
         size_loss = self.size_res_loss(
@@ -302,10 +297,12 @@ class SSD3DHead(nn.Module):
         # calculate corner loss
         pred_bbox3d = self.bbox_coder.decode(bbox_preds)
         pred_bbox3d = pred_bbox3d.reshape(-1, pred_bbox3d.shape[-1])
-        pred_bbox3d = LiDARInstance3DBoxes(
-            pred_bbox3d,
+
+        pred_bbox3d = img_metas[0]['box_type_3d'](
+            pred_bbox3d.clone(),
             box_dim=pred_bbox3d.shape[-1],
-            with_yaw=self.bbox_coder.with_rot)
+            with_yaw=self.bbox_coder.with_rot,
+            origin=(0.5, 0.5, 0.5))
         pred_corners3d = pred_bbox3d.corners.reshape(-1, 8, 3)
         corner_loss = self.corner_loss(
             pred_corners3d,
@@ -409,10 +406,18 @@ class SSD3DHead(nn.Module):
 
         box_loss_weights = positive_mask / (positive_mask.sum() + 1e-6)
 
+        batch_size, proposal_num = dir_class_targets.shape[:2]
+        heading_label_one_hot = dir_class_targets.new_zeros(
+            (batch_size, proposal_num, self.num_dir_bins))
+        heading_label_one_hot.scatter_(2, dir_class_targets.unsqueeze(-1), 1)
+        heading_res_loss_weight = heading_label_one_hot * \
+            box_loss_weights.unsqueeze(-1)
+
         return (vote_targets, center_targets, size_res_targets,
                 dir_class_targets, dir_res_targets, mask_targets,
                 centerness_targets, corner3d_targets, vote_mask, positive_mask,
-                negative_mask, centerness_weights, box_loss_weights)
+                negative_mask, centerness_weights, box_loss_weights,
+                heading_res_loss_weight)
 
     def get_targets_single(self,
                            points,
@@ -485,12 +490,6 @@ class SSD3DHead(nn.Module):
             size_res_targets[:, 2] - canonical_xyz[:, 2], min=0)
         distance_bottom = torch.clamp(
             size_res_targets[:, 2] + canonical_xyz[:, 2], min=0)
-        # assert (distance_front[positive_mask] < 0).sum() == 0
-        # assert (distance_back[positive_mask] < 0).sum() == 0
-        # assert (distance_left[positive_mask] < 0).sum() == 0
-        # assert (distance_right[positive_mask] < 0).sum() == 0
-        # assert (distance_bottom[positive_mask] < 0).sum() == 0
-        # assert (distance_top[positive_mask] < 0).sum() == 0
 
         centerness_l = torch.min(distance_front, distance_back) / torch.max(
             distance_front, distance_back)
@@ -639,6 +638,7 @@ class SSD3DHead(nn.Module):
             tuple[torch.Tensor]: Flags indicating whether each point is
                 inside bbox and the index of box where each point are in.
         """
+        # TODO: align points_in_boxes function in each box_structures
         num_bbox = bboxes_3d.tensor.shape[0]
         if isinstance(bboxes_3d, LiDARInstance3DBoxes):
             assignment = bboxes_3d.points_in_boxes(points).long()

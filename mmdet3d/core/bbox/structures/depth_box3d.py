@@ -251,3 +251,18 @@ class DepthInstance3DBoxes(BaseInstance3DBoxes):
         box_idxs_of_pts = points_in_boxes_batch(points_lidar, boxes_lidar)
 
         return box_idxs_of_pts.squeeze(0)
+
+    def enlarged_box(self, extra_width):
+        """Enlarge the length, width and height boxes.
+
+        Args:
+            extra_width (float | torch.Tensor): Extra width to enlarge the box.
+
+        Returns:
+            :obj:`LiDARInstance3DBoxes`: Enlarged boxes.
+        """
+        enlarged_boxes = self.tensor.clone()
+        enlarged_boxes[:, 3:6] += extra_width * 2
+        # bottom center z minus extra_width
+        enlarged_boxes[:, 2] -= extra_width
+        return self.new_box(enlarged_boxes)
