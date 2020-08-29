@@ -314,8 +314,7 @@ class SSD3DHead(nn.Module):
             bbox_preds['candidate_offset'].transpose(1, 2),
             vote_targets,
             weight=vote_mask.unsqueeze(-1))
-        # import pdb
-        # pdb.set_trace()
+
         losses = dict(
             centerness_loss=centerness_loss,
             center_loss=center_loss,
@@ -472,12 +471,13 @@ class SSD3DHead(nn.Module):
 
         # Centerness loss targets
         canonical_xyz = aggregated_points - center_targets
-        # TO-DO
-        # LiDARInstance3DBoxes and DepthInstance3DBoxes
-        # rotate in different direction
-        canonical_xyz = rotation_3d_in_axis(
-            canonical_xyz.unsqueeze(0).transpose(0, 1),
-            -gt_bboxes_3d.yaw[assignment], 2).squeeze(1)
+        if self.bbox_coder.with_rot:
+            # TODO:
+            # Align LiDARInstance3DBoxes and DepthInstance3DBoxes
+            # for points rotation
+            canonical_xyz = rotation_3d_in_axis(
+                canonical_xyz.unsqueeze(0).transpose(0, 1),
+                -gt_bboxes_3d.yaw[assignment], 2).squeeze(1)
         distance_front = torch.clamp(
             size_res_targets[:, 0] - canonical_xyz[:, 0], min=0)
         distance_back = torch.clamp(
@@ -524,11 +524,11 @@ class SSD3DHead(nn.Module):
                 negative_mask)
 
     def get_bboxes(self, points, bbox_preds, input_metas, rescale=False):
-        """Generate bboxes from vote head predictions.
+        """Generate bboxes from sdd 3d head predictions.
 
         Args:
             points (torch.Tensor): Input points.
-            bbox_preds (dict): Predictions from vote head.
+            bbox_preds (dict): Predictions from sdd 3d head.
             input_metas (list[dict]): Point cloud and image's meta info.
             rescale (bool): Whether to rescale bboxes.
 
@@ -539,9 +539,7 @@ class SSD3DHead(nn.Module):
         sem_scores = F.sigmoid(bbox_preds['obj_scores']).transpose(1, 2)
         obj_scores = sem_scores.max(-1)[0]
         bbox3d = self.bbox_coder.decode(bbox_preds)
-        # print(sem_scores.max(), (sem_scores > 0.3).sum())
-        # import pdb
-        # pdb.set_trace()
+
         batch_size = bbox3d.shape[0]
         results = list()
         for b in range(batch_size):
