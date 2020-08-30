@@ -1,7 +1,7 @@
 # H3DNet: 3D Object Detection Using Hybrid Geometric Primitives
 
 ## Introduction
-We implement H3DNet and provide the result and checkpoints on ScanNet and SUNRGBD datasets.
+We implement H3DNet and provide the result and checkpoints on ScanNet datasets.
 ```
 @inproceedings{zhang2020h3dnet,
     author = {Zhang, Zaiwei and Sun, Bo and Yang, Haitao and Huang, Qixing},
