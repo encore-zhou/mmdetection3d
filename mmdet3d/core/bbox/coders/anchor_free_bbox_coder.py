@@ -1,13 +1,13 @@
 import numpy as np
 import torch
 
-from mmdet.core.bbox import BaseBBoxCoder
+from mmdet.core.bbox import PartialBinBasedBBoxCoder
 from mmdet.core.bbox.builder import BBOX_CODERS
 
 
 @BBOX_CODERS.register_module()
-class AnchorFreeBBoxCoder(BaseBBoxCoder):
-    """Bbox Coder for 3D boxes.
+class AnchorFreeBBoxCoder(PartialBinBasedBBoxCoder):
+    """Anchor free bbox coder for 3D boxes.
 
     Args:
         num_dir_bins (int): Number of bins to encode direction angle.
@@ -15,7 +15,8 @@ class AnchorFreeBBoxCoder(BaseBBoxCoder):
     """
 
     def __init__(self, num_dir_bins, with_rot=True):
-        super(AnchorFreeBBoxCoder, self).__init__()
+        super(AnchorFreeBBoxCoder, self).__init__(
+            num_dir_bins, 0, [], with_rot=with_rot)
         self.num_dir_bins = num_dir_bins
         self.with_rot = with_rot
 
@@ -121,42 +122,3 @@ class AnchorFreeBBoxCoder(BaseBBoxCoder):
         results['dir_res'] = dir_res_norm * (np.pi / self.num_dir_bins)
 
         return results
-
-    def angle2class(self, angle):
-        """Convert continuous angle to a discrete class and a residual.
-
-        Convert continuous angle to a discrete class and a small
-        regression number from class center angle to current angle.
-
-        Args:
-            angle (torch.Tensor): Angle is from 0-2pi (or -pi~pi),
-                class center at 0, 1*(2pi/N), 2*(2pi/N) ...  (N-1)*(2pi/N).
-
-        Returns:
-            tuple: Encoded discrete class and residual.
-        """
-        angle = angle % (2 * np.pi)
-        angle_per_class = 2 * np.pi / float(self.num_dir_bins)
-        shifted_angle = (angle + angle_per_class / 2) % (2 * np.pi)
-        angle_cls = shifted_angle // angle_per_class
-        angle_res = shifted_angle - (
-            angle_cls * angle_per_class + angle_per_class / 2)
-        return angle_cls.long(), angle_res
-
-    def class2angle(self, angle_cls, angle_res, limit_period=True):
-        """Inverse function to angle2class.
-
-        Args:
-            angle_cls (torch.Tensor): Angle class to decode.
-            angle_res (torch.Tensor): Angle residual to decode.
-            limit_period (bool): Whether to limit angle to [-pi, pi].
-
-        Returns:
-            torch.Tensor: Angle decoded from angle_cls and angle_res.
-        """
-        angle_per_class = 2 * np.pi / float(self.num_dir_bins)
-        angle_center = angle_cls.float() * angle_per_class
-        angle = angle_center + angle_res
-        if limit_period:
-            angle[angle > np.pi] -= 2 * np.pi
-        return angle

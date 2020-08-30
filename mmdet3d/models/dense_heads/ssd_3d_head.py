@@ -321,14 +321,8 @@ class SSD3DHead(nn.Module):
             dir_res_loss=dir_res_loss,
             size_res_loss=size_loss,
             corner_loss=corner_loss,
-            vote_loss=vote_loss,
-            positive_sample=positive_mask.sum().float(),
-            centerness_cnt=(bbox_preds['obj_scores'].transpose(2, 1).sigmoid()
-                            > 0.3).sum().float(),
-            centerness_error=(
-                bbox_preds['obj_scores'].transpose(2, 1).sigmoid() -
-                centerness_targets)[positive_mask].abs().mean(),
-            vote_offset=vote_targets[vote_mask != 0].abs().mean())
+            vote_loss=vote_loss)
+
         return losses
 
     def get_targets(self,
