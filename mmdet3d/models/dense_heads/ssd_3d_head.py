@@ -514,6 +514,7 @@ class SSD3DHead(nn.Module):
             self.train_cfg.expand_dims_length)
         vote_mask, vote_assignment = self._assign_targets_by_points_inside(
             enlarged_gt_bboxes_3d, seed_points)
+
         vote_targets = enlarged_gt_bboxes_3d.gravity_center
         vote_targets = vote_targets[vote_assignment] - seed_points
         vote_mask = vote_mask.max(1)[0] > 0
@@ -547,7 +548,7 @@ class SSD3DHead(nn.Module):
                 obj_scores[b], sem_scores[b], bbox3d[b], points[b, ..., :3],
                 input_metas[b])
             bbox = input_metas[b]['box_type_3d'](
-                bbox_selected,
+                bbox_selected.clone(),
                 box_dim=bbox_selected.shape[-1],
                 with_yaw=self.bbox_coder.with_rot)
             results.append((bbox, score_selected, labels))
@@ -570,11 +571,10 @@ class SSD3DHead(nn.Module):
         """
         num_bbox = bbox.shape[0]
         bbox = input_meta['box_type_3d'](
-            bbox,
+            bbox.clone(),
             box_dim=bbox.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
-            origin=(0.5, 0.5, 0.5))
-
+            origin=(0.5, 0.5, 1.0))
         if isinstance(bbox, LiDARInstance3DBoxes):
             box_idx = bbox.points_in_boxes(points)
             box_indices = box_idx.new_zeros([num_bbox + 1])
@@ -582,10 +582,10 @@ class SSD3DHead(nn.Module):
             box_indices.scatter_add_(0, box_idx.long(),
                                      box_idx.new_ones(box_idx.shape))
             box_indices = box_indices[:-1]
-            nonempty_box_mask = box_indices > 5
+            nonempty_box_mask = box_indices > 0
         elif isinstance(bbox, DepthInstance3DBoxes):
             box_indices = bbox.points_in_boxes(points)
-            nonempty_box_mask = box_indices.T.sum(1) > 5
+            nonempty_box_mask = box_indices.T.sum(1) > 0
         else:
             raise NotImplementedError('Unsupported bbox type!')
 
