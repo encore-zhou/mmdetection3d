@@ -302,7 +302,7 @@ class SSD3DHead(nn.Module):
             pred_bbox3d.clone(),
             box_dim=pred_bbox3d.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
-            origin=(0.5, 0.5, 0.5))
+            origin=(0.5, 0.5, 1.0))
         pred_corners3d = pred_bbox3d.corners.reshape(-1, 8, 3)
         corner_loss = self.corner_loss(
             pred_corners3d,
