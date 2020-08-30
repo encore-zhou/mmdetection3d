@@ -297,12 +297,11 @@ class SSD3DHead(nn.Module):
         # calculate corner loss
         pred_bbox3d = self.bbox_coder.decode(bbox_preds)
         pred_bbox3d = pred_bbox3d.reshape(-1, pred_bbox3d.shape[-1])
-
         pred_bbox3d = img_metas[0]['box_type_3d'](
             pred_bbox3d.clone(),
             box_dim=pred_bbox3d.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
-            origin=(0.5, 0.5, 1.0))
+            origin=(0.5, 0.5, 0.5))
         pred_corners3d = pred_bbox3d.corners.reshape(-1, 8, 3)
         corner_loss = self.corner_loss(
             pred_corners3d,
@@ -574,7 +573,7 @@ class SSD3DHead(nn.Module):
             bbox.clone(),
             box_dim=bbox.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
-            origin=(0.5, 0.5, 1.0))
+            origin=(0.5, 0.5, 0.5))
         if isinstance(bbox, LiDARInstance3DBoxes):
             box_idx = bbox.points_in_boxes(points)
             box_indices = box_idx.new_zeros([num_bbox + 1])
