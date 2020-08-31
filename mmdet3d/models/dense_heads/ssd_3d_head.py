@@ -6,7 +6,7 @@ from torch.nn import functional as F
 from mmdet3d.core.bbox.structures import (DepthInstance3DBoxes,
                                           LiDARInstance3DBoxes,
                                           rotation_3d_in_axis)
-from mmdet3d.core.post_processing import aligned_3d_nms
+from mmdet3d.core.post_processing import aligned_bev_nms
 from mmdet3d.models.builder import build_loss
 from mmdet3d.ops import PointSAModuleMSG
 from mmdet.core import build_bbox_coder, multi_apply
@@ -588,10 +588,13 @@ class SSD3DHead(nn.Module):
         minmax_box3d[:, 3:] = torch.max(corner3d, dim=1)[0]
 
         bbox_classes = torch.argmax(sem_scores, -1)
-        nms_selected = aligned_3d_nms(minmax_box3d[nonempty_box_mask],
-                                      obj_scores[nonempty_box_mask],
-                                      bbox_classes[nonempty_box_mask],
-                                      self.test_cfg.nms_thr)
+        nms_selected = aligned_bev_nms(minmax_box3d[nonempty_box_mask],
+                                       obj_scores[nonempty_box_mask],
+                                       bbox_classes[nonempty_box_mask],
+                                       self.test_cfg.nms_thr)
+
+        if nms_selected.shape[0] > self.test_cfg.max_output_num:
+            nms_selected = nms_selected[:self.test_cfg.max_output_num]
 
         # filter empty boxes and boxes with low score
         scores_mask = (obj_scores > self.test_cfg.score_thr)
@@ -604,8 +607,7 @@ class SSD3DHead(nn.Module):
             bbox_selected, score_selected, labels = [], [], []
             for k in range(sem_scores.shape[-1]):
                 bbox_selected.append(bbox[selected].tensor)
-                score_selected.append(obj_scores[selected] *
-                                      sem_scores[selected][:, k])
+                score_selected.append(obj_scores[selected])
                 labels.append(
                     torch.zeros_like(bbox_classes[selected]).fill_(k))
             bbox_selected = torch.cat(bbox_selected, 0)
