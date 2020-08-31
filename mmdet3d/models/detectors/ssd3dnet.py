@@ -72,9 +72,7 @@ class SSD3DNet(SingleStage3DDetector):
             list: Predicted 3d boxes.
         """
         points_cat = torch.stack(points)
-        import numpy as np
-        points_cat = torch.from_numpy(
-            np.load('../3DSSD/ssd3d_input.npy')).cuda()
+
         x = self.extract_feat(points_cat)
         bbox_preds = self.bbox_head(x)
         bbox_list = self.bbox_head.get_bboxes(
