@@ -12,7 +12,7 @@ model = dict(
         aggregation_channels=(64, 128, 256),
         fps_mods=(('D-FPS'), ('FS'), ('F-FPS', 'D-FPS')),
         fps_sample_range_lists=((-1), (-1), (512, -1)),
-        norm_cfg=dict(type='BN2d'),
+        norm_cfg=dict(type='BN2d', eps=1e-3),
         pool_mod='max',
         normalize_xyz=False),
     bbox_head=dict(
@@ -24,6 +24,7 @@ model = dict(
             radii=(4.8, 6.4),
             sample_nums=(16, 32),
             mlp_channels=((256, 256, 256, 512), (256, 256, 512, 1024)),
+            norm_cfg=dict(type='BN2d', eps=1e-3),
             use_xyz=True,
             normalize_xyz=False,
             bias=True),
@@ -31,7 +32,7 @@ model = dict(
         cls_pred_mlps=(128, ),
         reg_pred_mlps=(128, ),
         conv_cfg=dict(type='Conv1d'),
-        norm_cfg=dict(type='BN1d'),
+        norm_cfg=dict(type='BN1d', eps=1e-3),
         objectness_loss=dict(
             type='CrossEntropyLoss',
             use_sigmoid=True,

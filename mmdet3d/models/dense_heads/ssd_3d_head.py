@@ -183,7 +183,7 @@ class SSD3DHead(nn.Module):
             feat_dict (dict): Feature dict from backbone.
 
         Returns:
-            dict: Predictions of vote head.
+            dict: Predictions of SSD3D head.
         """
         seed_points = feat_dict['sa_xyz']
         seed_features = feat_dict['sa_features']

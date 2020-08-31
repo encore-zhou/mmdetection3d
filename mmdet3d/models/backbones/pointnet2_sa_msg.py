@@ -102,7 +102,7 @@ class PointNet2SAMSG(nn.Module):
                     sa_out_channel,
                     aggregation_channels[sa_index],
                     conv_cfg=dict(type='Conv1d'),
-                    norm_cfg=dict(type='BN1d'),
+                    norm_cfg=dict(type='BN1d', eps=1e-3),
                     kernel_size=1,
                     bias=True))
             sa_in_channel = aggregation_channels[sa_index]
@@ -165,6 +165,7 @@ class PointNet2SAMSG(nn.Module):
         out_sa_xyz = []
         out_sa_features = []
         out_sa_indices = []
+
         for i in range(self.num_sa):
             cur_xyz, cur_features, cur_indices = self.SA_modules[i](
                 sa_xyz[i], sa_features[i])
