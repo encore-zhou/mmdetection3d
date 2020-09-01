@@ -1,5 +1,6 @@
 import mmcv
 import numpy as np
+from os import path as osp
 
 from mmdet.datasets.builder import PIPELINES
 from mmdet.datasets.pipelines import LoadAnnotations
@@ -365,6 +366,7 @@ class LoadAnnotations3D(LoadAnnotations):
                  with_mask=False,
                  with_seg=False,
                  poly2mask=True,
+                 with_plane=False,
                  file_client_args=dict(backend='disk')):
         super().__init__(
             with_bbox,
@@ -377,6 +379,7 @@ class LoadAnnotations3D(LoadAnnotations):
         self.with_label_3d = with_label_3d
         self.with_mask_3d = with_mask_3d
         self.with_seg_3d = with_seg_3d
+        self.with_plane = with_plane
 
     def _load_bboxes_3d(self, results):
         """Private function to load 3D bounding box annotations.
@@ -454,6 +457,44 @@ class LoadAnnotations3D(LoadAnnotations):
         results['pts_seg_fields'].append('pts_semantic_mask')
         return results
 
+    def _load_road_plane_3d(self, results):
+        """Private function to load road plane annotations.
+
+        Args:
+            results (dict): Result dict from :obj:`mmdet3d.CustomDataset`.
+
+        Returns:
+            dict: The dict containing the semantic segmentation annotations.
+        """
+        pts_filename = results['pts_filename']
+        plane_filename = pts_filename.split('/')
+        plane_filename[-2] = 'planes'
+        plane_filename = osp.join(*plane_filename)
+        plane_filename = plane_filename[:-3] + 'txt'
+
+        if self.file_client is None:
+            self.file_client = mmcv.FileClient(**self.file_client_args)
+        try:
+            plane_bytes = self.file_client.get(plane_filename)
+            plane = str(plane_bytes, encoding='utf-8').split('\n')
+        except ConnectionError:
+            mmcv.check_file_exist(plane_filename)
+            plane = open(plane_filename, 'r').readlines()
+
+        plane = plane[3].strip().split()
+        plane = [float(i) for i in plane]
+        plane = np.asarray(plane)
+        # Ensure normal is always facing up.
+        # In Kitti's frame of reference, +y is down
+        if plane[1] > 0:
+            plane = -plane
+
+        # Normalize the plane coefficients
+        norm = np.linalg.norm(plane[0:3])
+        plane = plane / norm
+        results['plane'] = plane
+        return results
+
     def __call__(self, results):
         """Call function to load multiple types annotations.
 
@@ -475,6 +516,8 @@ class LoadAnnotations3D(LoadAnnotations):
             results = self._load_masks_3d(results)
         if self.with_seg_3d:
             results = self._load_semantic_seg_3d(results)
+        if self.with_plane:
+            results = self._load_road_plane_3d(results)
 
         return results
 
@@ -490,5 +533,6 @@ class LoadAnnotations3D(LoadAnnotations):
         repr_str += f'{indent_str}with_label={self.with_label}, '
         repr_str += f'{indent_str}with_mask={self.with_mask}, '
         repr_str += f'{indent_str}with_seg={self.with_seg}, '
+        repr_str += f'{indent_str}with_plane={self.with_plane})'
         repr_str += f'{indent_str}poly2mask={self.poly2mask})'
         return repr_str

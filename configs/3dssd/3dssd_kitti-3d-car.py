@@ -31,6 +31,7 @@ train_pipeline = [
         type='LoadAnnotations3D',
         with_bbox_3d=True,
         with_label_3d=True,
+        with_plane=True,
         file_client_args=file_client_args),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
@@ -46,7 +47,7 @@ train_pipeline = [
         type='GlobalRotScaleTrans',
         rot_range=[-0.78539816, 0.78539816],
         scale_ratio_range=[0.9, 1.1]),
-    dict(type='BackgroundPointsFilter', bbox_enlarge_range=(1.0, 2.0, 1.0)),
+    dict(type='BackgroundPointsFilter', bbox_enlarge_range=(0.5, 2.0, 0.5)),
     dict(type='IndoorPointSample', num_points=16384),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
     dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d'])
@@ -82,8 +83,8 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=1,
+    samples_per_gpu=6,
+    workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=2,

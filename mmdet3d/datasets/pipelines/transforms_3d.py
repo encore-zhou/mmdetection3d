@@ -171,8 +171,23 @@ class ObjectSample(object):
                 gt_bboxes_2d=gt_bboxes_2d,
                 img=img)
         else:
+            if 'plane' in input_dict.keys():
+                # TODO: Remove rotation hardcode
+                rot = np.asarray([[0, 0, 1], [-1, 0, 0], [0, -1, 0]])
+                plane = input_dict['plane']
+                dist_points = np.asarray([0, 0, -plane[3] / plane[2]])
+                plane[:3] = np.dot(rot, plane[:3].reshape(3, 1)).reshape(-1)
+                dist_points = np.dot(rot, dist_points.reshape(3,
+                                                              1)).reshape(-1)
+                plane[3] = -(plane[:3] * dist_points).sum()
+            else:
+                plane = None
+
             sampled_dict = self.db_sampler.sample_all(
-                gt_bboxes_3d.tensor.numpy(), gt_labels_3d, img=None)
+                gt_bboxes_3d.tensor.numpy(),
+                gt_labels_3d,
+                img=None,
+                plane=plane)
 
         if sampled_dict is not None:
             sampled_gt_bboxes_3d = sampled_dict['gt_bboxes_3d']

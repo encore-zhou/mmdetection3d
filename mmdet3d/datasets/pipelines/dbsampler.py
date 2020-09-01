@@ -179,7 +179,7 @@ class DataBaseSampler(object):
                 db_infos[name] = filtered_infos
         return db_infos
 
-    def sample_all(self, gt_bboxes, gt_labels, img=None):
+    def sample_all(self, gt_bboxes, gt_labels, img=None, plane=None):
         """Sampling all categories of bboxes.
 
         Args:
@@ -235,19 +235,22 @@ class DataBaseSampler(object):
         ret = None
         if len(sampled) > 0:
             sampled_gt_bboxes = np.concatenate(sampled_gt_bboxes, axis=0)
+            if plane is not None:
+                cur_height = (sampled_gt_bboxes[:, :3] *
+                              plane[:3].reshape(1, 3)).sum(1) + plane[3]
+                sampled_gt_bboxes[:, 2] -= cur_height
             # center = sampled_gt_bboxes[:, 0:3]
 
             # num_sampled = len(sampled)
             s_points_list = []
             count = 0
-            for info in sampled:
+            for idx, info in enumerate(sampled):
                 file_path = os.path.join(
                     self.data_root,
                     info['path']) if self.data_root else info['path']
                 s_points = np.fromfile(
                     file_path, dtype=np.float32).reshape([-1, 4])
                 s_points[:, :3] += info['box3d_lidar'][:3]
-
                 count += 1
 
                 s_points_list.append(s_points)
