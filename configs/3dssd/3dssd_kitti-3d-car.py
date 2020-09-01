@@ -32,25 +32,26 @@ train_pipeline = [
         with_bbox_3d=True,
         with_label_3d=True,
         file_client_args=file_client_args),
+    dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
+    dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectSample', db_sampler=db_sampler),
+    dict(type='RandomFlip3D', flip_ratio_bev_horizontal=0.5),
     dict(
         type='ObjectNoise',
         num_try=100,
         translation_std=[1.0, 1.0, 0.5],
         global_rot_range=[0.0, 0.0],
         rot_range=[-0.78539816, 0.78539816]),
-    dict(type='RandomFlip3D', flip_ratio_bev_horizontal=0.5),
     dict(
         type='GlobalRotScaleTrans',
         rot_range=[-0.78539816, 0.78539816],
         scale_ratio_range=[0.9, 1.1]),
-    dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
-    dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
+    dict(type='BackgroundPointsFilter', bbox_enlarge_range=(1.0, 2.0, 1.0)),
     dict(type='IndoorPointSample', num_points=16384),
-    dict(type='PointShuffle'),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
     dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d'])
 ]
+
 test_pipeline = [
     dict(
         type='LoadPointsFromFile',
