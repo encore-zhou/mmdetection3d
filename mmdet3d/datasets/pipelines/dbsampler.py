@@ -236,9 +236,14 @@ class DataBaseSampler(object):
         if len(sampled) > 0:
             sampled_gt_bboxes = np.concatenate(sampled_gt_bboxes, axis=0)
             if plane is not None:
-                cur_height = (sampled_gt_bboxes[:, :3] *
-                              plane[:3].reshape(1, 3)).sum(1) + plane[3]
-                sampled_gt_bboxes[:, 2] -= cur_height
+                # sampled_gt_bboxes_cp = sampled_gt_bboxes.copy()
+                # cur_height = (sampled_gt_bboxes[:, :3] *
+                #               plane[:3].reshape(1, 3)).sum(1) + plane[3]
+                # sampled_gt_bboxes[:, 2] -= cur_height
+                cur_height = -(
+                    (sampled_gt_bboxes[:, :2] * plane[:2].reshape(1, 2)).sum(1)
+                    + plane[3]) / plane[2]
+                sampled_gt_bboxes[:, 2] = cur_height
             # center = sampled_gt_bboxes[:, 0:3]
 
             # num_sampled = len(sampled)
