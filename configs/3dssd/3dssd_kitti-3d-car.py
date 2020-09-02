@@ -31,11 +31,10 @@ train_pipeline = [
         type='LoadAnnotations3D',
         with_bbox_3d=True,
         with_label_3d=True,
-        with_plane=True,
         file_client_args=file_client_args),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
-    dict(type='ObjectSample', db_sampler=db_sampler),
+    dict(type='ObjectSample', db_sampler=db_sampler, use_plane=True),
     dict(type='RandomFlip3D', flip_ratio_bev_horizontal=0.5),
     dict(
         type='ObjectNoise',

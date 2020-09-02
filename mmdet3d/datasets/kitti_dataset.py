@@ -126,7 +126,8 @@ class KittiDataset(Custom3DDataset):
         if not self.test_mode:
             annos = self.get_ann_info(index)
             input_dict['ann_info'] = annos
-
+            if 'road_plane' in info.keys():
+                input_dict['road_plane'] = info['road_plane']
         return input_dict
 
     def get_ann_info(self, index):

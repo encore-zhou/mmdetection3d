@@ -121,11 +121,13 @@ class ObjectSample(object):
         sample_2d (bool): Whether to also paste 2D image patch to the images
             This should be true when applying multi-modality cut-and-paste.
             Defaults to False.
+        use_plane (bool): Whether to use road plane to align bounding box.
     """
 
-    def __init__(self, db_sampler, sample_2d=False):
+    def __init__(self, db_sampler, sample_2d=False, use_plane=False):
         self.sampler_cfg = db_sampler
         self.sample_2d = sample_2d
+        self.use_plane = use_plane
         if 'type' not in db_sampler.keys():
             db_sampler['type'] = 'DataBaseSampler'
         self.db_sampler = build_from_cfg(db_sampler, OBJECTSAMPLERS)
@@ -171,15 +173,8 @@ class ObjectSample(object):
                 gt_bboxes_2d=gt_bboxes_2d,
                 img=img)
         else:
-            if 'plane' in input_dict.keys():
-                # TODO: Remove rotation hardcode
-                rot = np.asarray([[0, 0, 1], [-1, 0, 0], [0, -1, 0]])
-                plane = input_dict['plane']
-                dist_points = np.asarray([0, 0, -plane[3] / plane[2]])
-                plane[:3] = np.dot(rot, plane[:3].reshape(3, 1)).reshape(-1)
-                dist_points = np.dot(rot, dist_points.reshape(3,
-                                                              1)).reshape(-1)
-                plane[3] = -(plane[:3] * dist_points).sum()
+            if self.use_plane and 'road_plane' in input_dict.keys():
+                plane = input_dict['road_plane']
             else:
                 plane = None
 

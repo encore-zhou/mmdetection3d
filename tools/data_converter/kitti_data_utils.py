@@ -1,6 +1,7 @@
 import numpy as np
 from collections import OrderedDict
 from concurrent import futures as futures
+from os import path as osp
 from pathlib import Path
 from skimage import io
 
@@ -67,6 +68,15 @@ def get_calib_path(idx,
                                relative_path, exist_check)
 
 
+def get_road_plane_path(idx,
+                        prefix,
+                        training=True,
+                        relative_path=True,
+                        exist_check=True):
+    return get_kitti_info_path(idx, prefix, 'planes', '.txt', training,
+                               relative_path, exist_check)
+
+
 def get_label_anno(label_path):
     annotations = {}
     annotations.update({
@@ -121,6 +131,7 @@ def get_kitti_image_info(path,
                          label_info=True,
                          velodyne=False,
                          calib=False,
+                         road_plane=False,
                          image_ids=7481,
                          extend_matrix=True,
                          num_worker=8,
@@ -169,6 +180,28 @@ def get_kitti_image_info(path,
         if velodyne:
             pc_info['velodyne_path'] = get_velodyne_path(
                 idx, path, training, relative_path)
+
+        if road_plane:
+            plane_path = get_road_plane_path(idx, path, training,
+                                             relative_path)
+            rot = np.asarray([[0, 0, 1], [-1, 0, 0], [0, -1, 0]])
+            plane = open(osp.join(root_path, plane_path), 'r').readlines()
+            plane = plane[3].strip().split()
+            plane = [float(i) for i in plane]
+            plane = np.asarray(plane)
+            # Ensure normal is always facing up.
+            # In Kitti's frame of reference, +y is down
+            if plane[1] > 0:
+                plane = -plane
+
+            # Normalize the plane coefficients
+            norm = np.linalg.norm(plane[0:3])
+            plane = plane / norm
+            dist_points = np.asarray([0, 0, -plane[3] / plane[2]])
+            plane[:3] = np.dot(rot, plane[:3].reshape(3, 1)).reshape(-1)
+            dist_points = np.dot(rot, dist_points.reshape(3, 1)).reshape(-1)
+            plane[3] = -(plane[:3] * dist_points).sum()
+            info['road_plane'] = plane
         image_info['image_path'] = get_image_path(idx, path, training,
                                                   relative_path)
         if with_imageshape:
