@@ -243,7 +243,10 @@ class DataBaseSampler(object):
                 cur_height = -(
                     (sampled_gt_bboxes[:, :2] * plane[:2].reshape(1, 2)).sum(1)
                     + plane[3]) / plane[2]
+                move_height = cur_height - sampled_gt_bboxes[:, 2]
                 sampled_gt_bboxes[:, 2] = cur_height
+            else:
+                move_height = None
             # center = sampled_gt_bboxes[:, 0:3]
 
             # num_sampled = len(sampled)
@@ -256,6 +259,8 @@ class DataBaseSampler(object):
                 s_points = np.fromfile(
                     file_path, dtype=np.float32).reshape([-1, 4])
                 s_points[:, :3] += info['box3d_lidar'][:3]
+                if move_height is not None:
+                    s_points[:, 2] += move_height[idx]
                 count += 1
 
                 s_points_list.append(s_points)
