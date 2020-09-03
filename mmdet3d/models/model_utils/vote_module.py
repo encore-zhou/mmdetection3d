@@ -23,6 +23,9 @@ class VoteModule(nn.Module):
             Default: dict(type='BN1d').
         norm_feats (bool): Whether to normalize features.
             Default: True.
+        with_feat_residual (bool): Whether to predict residual features.
+            Default: True.
+        clip_xyz_offset (list[float], None): The range of points translation.
         vote_loss (dict): Config of vote loss.
     """
 
@@ -33,7 +36,10 @@ class VoteModule(nn.Module):
                  conv_channels=(16, 16),
                  conv_cfg=dict(type='Conv1d'),
                  norm_cfg=dict(type='BN1d'),
+                 act_cfg=dict(type='ReLU'),
                  norm_feats=True,
+                 with_feat_residual=True,
+                 clip_xyz_offset=None,
                  vote_loss=None):
         super().__init__()
         self.in_channels = in_channels
@@ -41,6 +47,8 @@ class VoteModule(nn.Module):
         self.gt_per_seed = gt_per_seed
         self.norm_feats = norm_feats
         self.vote_loss = build_loss(vote_loss)
+        self.with_feat_residual = with_feat_residual
+        self.clip_xyz_offset = clip_xyz_offset
 
         prev_channels = in_channels
         vote_conv_list = list()
@@ -53,13 +61,17 @@ class VoteModule(nn.Module):
                     padding=0,
                     conv_cfg=conv_cfg,
                     norm_cfg=norm_cfg,
+                    act_cfg=act_cfg,
                     bias=True,
                     inplace=True))
             prev_channels = conv_channels[k]
         self.vote_conv = nn.Sequential(*vote_conv_list)
 
         # conv_out predicts coordinate and residual features
-        out_channel = (3 + in_channels) * self.vote_per_seed
+        if with_feat_residual:
+            out_channel = (3 + in_channels) * self.vote_per_seed
+        else:
+            out_channel = 3 * self.vote_per_seed
         self.conv_out = nn.Conv1d(prev_channels, out_channel, 1)
 
     def forward(self, seed_points, seed_feats):
@@ -89,20 +101,32 @@ class VoteModule(nn.Module):
         votes = votes.transpose(2, 1).view(batch_size, num_seed,
                                            self.vote_per_seed, -1)
         offset = votes[:, :, :, 0:3]
-        res_feats = votes[:, :, :, 3:]
-
-        vote_points = (seed_points.unsqueeze(2) + offset).contiguous()
+        if self.clip_xyz_offset is not None:
+            limited_offset = offset.clone()
+            for axis in range(len(self.clip_xyz_offset)):
+                limited_offset[..., axis].clamp(
+                    min=-self.clip_xyz_offset[axis],
+                    max=self.clip_xyz_offset[axis])
+            vote_points = (seed_points.unsqueeze(2) +
+                           limited_offset).contiguous()
+        else:
+            vote_points = (seed_points.unsqueeze(2) + offset).contiguous()
         vote_points = vote_points.view(batch_size, num_vote, 3)
-        vote_feats = (seed_feats.transpose(2, 1).unsqueeze(2) +
-                      res_feats).contiguous()
-        vote_feats = vote_feats.view(batch_size, num_vote,
-                                     feat_channels).transpose(2,
-                                                              1).contiguous()
 
-        if self.norm_feats:
-            features_norm = torch.norm(vote_feats, p=2, dim=1)
-            vote_feats = vote_feats.div(features_norm.unsqueeze(1))
-        return vote_points, vote_feats
+        if self.with_feat_residual:
+            res_feats = votes[:, :, :, 3:]
+            vote_feats = (seed_feats.transpose(2, 1).unsqueeze(2) +
+                          res_feats).contiguous()
+            vote_feats = vote_feats.view(batch_size,
+                                         num_vote, feat_channels).transpose(
+                                             2, 1).contiguous()
+
+            if self.norm_feats:
+                features_norm = torch.norm(vote_feats, p=2, dim=1)
+                vote_feats = vote_feats.div(features_norm.unsqueeze(1))
+        else:
+            vote_feats = None
+        return vote_points, vote_feats, offset
 
     def get_loss(self, seed_points, vote_points, seed_indices,
                  vote_targets_mask, vote_targets):

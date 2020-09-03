@@ -134,8 +134,8 @@ class VoteHead(nn.Module):
         seed_indices = feat_dict['fp_indices'][-1]
 
         # 1. generate vote_points from seed_points
-        vote_points, vote_features = self.vote_module(seed_points,
-                                                      seed_features)
+        vote_points, vote_features, _ = self.vote_module(
+            seed_points, seed_features)
         results = dict(
             seed_points=seed_points,
             seed_indices=seed_indices,
