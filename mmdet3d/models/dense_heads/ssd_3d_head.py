@@ -195,7 +195,8 @@ class SSD3DHead(nn.Module):
 
         limited_candidate_offset = candidate_offset.clone().transpose(1, 2)
         for axis in range(len(self.test_cfg.max_translate_range)):
-            limited_candidate_offset[..., axis].clamp(
+            limited_candidate_offset[..., axis] = \
+                limited_candidate_offset[..., axis].clamp(
                 min=-self.test_cfg.max_translate_range[axis],
                 max=self.test_cfg.max_translate_range[axis])
 
