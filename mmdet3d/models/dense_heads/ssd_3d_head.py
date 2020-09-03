@@ -195,10 +195,13 @@ class SSD3DHead(nn.Module):
 
         limited_candidate_offset = candidate_offset.clone().transpose(1, 2)
         for axis in range(len(self.test_cfg.max_translate_range)):
-            limited_candidate_offset[..., axis] = \
-                limited_candidate_offset[..., axis].clamp(
-                min=-self.test_cfg.max_translate_range[axis],
-                max=self.test_cfg.max_translate_range[axis])
+            limited_candidate_offset[
+                limited_candidate_offset[..., axis] > self.test_cfg.
+                max_translate_range[axis]] = self.test_cfg.max_translate_range[
+                    axis]
+            limited_candidate_offset[limited_candidate_offset[
+                ..., axis] < -self.test_cfg.max_translate_range[
+                    axis]] = -self.test_cfg.max_translate_range[axis]
 
         candidate_points = seed_points[:, :self.num_candidates] + \
             limited_candidate_offset
