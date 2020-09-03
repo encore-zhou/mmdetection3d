@@ -193,15 +193,12 @@ class SSD3DHead(nn.Module):
         candidate_offset = self.candidate_points_layers(
             seed_features[:, :, :self.num_candidates])
 
-        limited_candidate_offset = candidate_offset.clone().transpose(1, 2)
+        limited_candidate_offset = []
         for axis in range(len(self.test_cfg.max_translate_range)):
-            limited_candidate_offset[
-                limited_candidate_offset[..., axis] > self.test_cfg.
-                max_translate_range[axis]] = self.test_cfg.max_translate_range[
-                    axis]
-            limited_candidate_offset[limited_candidate_offset[
-                ..., axis] < -self.test_cfg.max_translate_range[
-                    axis]] = -self.test_cfg.max_translate_range[axis]
+            limited_candidate_offset.append(candidate_offset[:, 0].clamp(
+                min=-self.test_cfg.max_translate_range[axis],
+                max=self.test_cfg.max_translate_range[axis]))
+        limited_candidate_offset = torch.stack(limited_candidate_offset, -1)
 
         candidate_points = seed_points[:, :self.num_candidates] + \
             limited_candidate_offset
