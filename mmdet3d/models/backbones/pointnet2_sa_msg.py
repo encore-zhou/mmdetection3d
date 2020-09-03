@@ -24,6 +24,8 @@ class PointNet2SAMSG(nn.Module):
         fps_mods (tuple[int]): Mod of FPS for each SA module.
         fps_sample_range_lists (tuple[tuple[int]]): The number of sampling
             points which each SA module samples.
+        dilated_group (tuple[bool]): Whether to use dilated ball query for
+            each SA module.
         out_indices (Sequence[int]): Output from which stages.
         norm_cfg (dict): Config of normalization layer.
         pool_mod (str): Pool method ('max' or 'avg') for SA modules.
@@ -44,6 +46,7 @@ class PointNet2SAMSG(nn.Module):
                  aggregation_channels=(64, 128, 256),
                  fps_mods=(('D-FPS'), ('FS'), ('F-FPS', 'D-FPS')),
                  fps_sample_range_lists=((-1), (-1), (512, -1)),
+                 dilated_group=(True, True, True),
                  out_indices=(2, ),
                  norm_cfg=dict(type='BN2d'),
                  pool_mod='max',
@@ -91,6 +94,7 @@ class PointNet2SAMSG(nn.Module):
                     mlp_channels=cur_sa_mlps,
                     fps_mod=cur_fps_mod,
                     fps_sample_range_list=cur_fps_sample_range_list,
+                    dilated_group=dilated_group[sa_index],
                     norm_cfg=norm_cfg,
                     use_xyz=use_xyz,
                     pool_mod=pool_mod,
