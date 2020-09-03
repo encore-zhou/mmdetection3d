@@ -42,6 +42,7 @@ class AnchorFreeBBoxCoder(PartialBinBasedBBoxCoder):
         if self.with_rot:
             (dir_class_target,
              dir_res_target) = self.angle2class(gt_bboxes_3d.yaw)
+            dir_res_target /= (2 * np.pi / self.num_dir_bins)
         else:
             dir_class_target = gt_labels_3d.new_zeros(box_num)
             dir_res_target = gt_bboxes_3d.tensor.new_zeros(box_num)
@@ -119,6 +120,6 @@ class AnchorFreeBBoxCoder(PartialBinBasedBBoxCoder):
         start = end
 
         results['dir_res_norm'] = dir_res_norm
-        results['dir_res'] = dir_res_norm * (np.pi / self.num_dir_bins)
+        results['dir_res'] = dir_res_norm * (2 * np.pi / self.num_dir_bins)
 
         return results
