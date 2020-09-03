@@ -195,7 +195,7 @@ class SSD3DHead(nn.Module):
 
         limited_candidate_offset = []
         for axis in range(len(self.test_cfg.max_translate_range)):
-            limited_candidate_offset.append(candidate_offset[:, 0].clamp(
+            limited_candidate_offset.append(candidate_offset[:, axis].clamp(
                 min=-self.test_cfg.max_translate_range[axis],
                 max=self.test_cfg.max_translate_range[axis]))
         limited_candidate_offset = torch.stack(limited_candidate_offset, -1)
