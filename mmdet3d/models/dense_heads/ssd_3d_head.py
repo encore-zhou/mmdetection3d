@@ -458,7 +458,10 @@ class SSD3DHead(nn.Module):
         dir_res_targets = dir_res_targets[assignment]
         corner3d_targets = gt_corner3d[assignment]
 
-        dist = torch.norm(aggregated_points - center_targets, dim=1)
+        top_center_targets = center_targets.clone()
+        top_center_targets[:, 2] += size_res_targets[:, 2]
+        dist = torch.norm(aggregated_points - top_center_targets, dim=1)
+
         dist_mask = dist < self.train_cfg.pos_distance_thr
         positive_mask = (points_mask.max(1)[0] > 0) * dist_mask
         negative_mask = (points_mask.max(1)[0] == 0)
@@ -506,10 +509,11 @@ class SSD3DHead(nn.Module):
         # Vote loss targets
         enlarged_gt_bboxes_3d = gt_bboxes_3d.enlarged_box(
             self.train_cfg.expand_dims_length)
+        enlarged_gt_bboxes_3d.tensor[:, 2] -= self.train_cfg.expand_dims_length
         vote_mask, vote_assignment = self._assign_targets_by_points_inside(
             enlarged_gt_bboxes_3d, seed_points)
 
-        vote_targets = enlarged_gt_bboxes_3d.gravity_center
+        vote_targets = gt_bboxes_3d.gravity_center
         vote_targets = vote_targets[vote_assignment] - seed_points
         vote_mask = vote_mask.max(1)[0] > 0
 
@@ -534,7 +538,6 @@ class SSD3DHead(nn.Module):
         sem_scores = F.sigmoid(bbox_preds['obj_scores']).transpose(1, 2)
         obj_scores = sem_scores.max(-1)[0]
         bbox3d = self.bbox_coder.decode(bbox_preds)
-
         batch_size = bbox3d.shape[0]
         results = list()
         for b in range(batch_size):
@@ -569,6 +572,7 @@ class SSD3DHead(nn.Module):
             box_dim=bbox.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
             origin=(0.5, 0.5, 1.0))
+
         if isinstance(bbox, LiDARInstance3DBoxes):
             box_idx = bbox.points_in_boxes(points)
             box_indices = box_idx.new_zeros([num_bbox + 1])
@@ -576,10 +580,10 @@ class SSD3DHead(nn.Module):
             box_indices.scatter_add_(0, box_idx.long(),
                                      box_idx.new_ones(box_idx.shape))
             box_indices = box_indices[:-1]
-            nonempty_box_mask = box_indices > 0
+            nonempty_box_mask = box_indices >= 0
         elif isinstance(bbox, DepthInstance3DBoxes):
             box_indices = bbox.points_in_boxes(points)
-            nonempty_box_mask = box_indices.T.sum(1) > 0
+            nonempty_box_mask = box_indices.T.sum(1) >= 0
         else:
             raise NotImplementedError('Unsupported bbox type!')
 
@@ -598,7 +602,7 @@ class SSD3DHead(nn.Module):
             nms_selected = nms_selected[:self.test_cfg.max_output_num]
 
         # filter empty boxes and boxes with low score
-        scores_mask = (obj_scores > self.test_cfg.score_thr)
+        scores_mask = (obj_scores >= self.test_cfg.score_thr)
         nonempty_box_inds = torch.nonzero(nonempty_box_mask).flatten()
         nonempty_mask = torch.zeros_like(bbox_classes).scatter(
             0, nonempty_box_inds[nms_selected], 1)
