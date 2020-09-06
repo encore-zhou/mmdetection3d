@@ -94,13 +94,15 @@ class DataBaseSampler(object):
                  rate,
                  prepare,
                  sample_groups,
-                 classes=None):
+                 classes=None,
+                 enlarge_range=[0, 0, 0]):
         super().__init__()
         self.data_root = data_root
         self.info_path = info_path
         self.rate = rate
         self.prepare = prepare
         self.classes = classes
+        self.enlarge_range = np.asarray(enlarge_range)
         self.cat2label = {name: i for i, name in enumerate(classes)}
         self.label2cat = {i: name for i, name in enumerate(classes)}
 
@@ -298,6 +300,7 @@ class DataBaseSampler(object):
         boxes = np.concatenate([gt_bboxes, sp_boxes], axis=0).copy()
 
         sp_boxes_new = boxes[gt_bboxes.shape[0]:]
+        sp_boxes_new[:, 3:6] += self.enlarge_range.reshape(1, 3)
         sp_boxes_bv = box_np_ops.center_to_corner_box2d(
             sp_boxes_new[:, 0:2], sp_boxes_new[:, 3:5], sp_boxes_new[:, 6])
 
