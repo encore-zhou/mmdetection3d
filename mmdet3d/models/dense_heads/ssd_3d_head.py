@@ -380,7 +380,7 @@ class SSD3DHead(nn.Module):
             pts_instance_mask = [None for i in range(len(gt_labels_3d))]
 
         aggregated_points = [
-            bbox_preds['aggregated_points'][i].detach()
+            bbox_preds['aggregated_points'][i]
             for i in range(len(gt_labels_3d))
         ]
 
@@ -405,7 +405,7 @@ class SSD3DHead(nn.Module):
         dir_res_targets = torch.stack(dir_res_targets)
         size_res_targets = torch.stack(size_res_targets)
         mask_targets = torch.stack(mask_targets)
-        centerness_targets = torch.stack(centerness_targets)
+        centerness_targets = torch.stack(centerness_targets).detach()
         corner3d_targets = torch.stack(corner3d_targets)
         vote_targets = torch.stack(vote_targets)
         vote_mask = torch.stack(vote_mask)
