@@ -3,7 +3,8 @@ from mmcv.cnn import ConvModule
 from torch import nn as nn
 from torch.nn import functional as F
 
-from mmdet3d.core.bbox.structures import (DepthInstance3DBoxes,
+from mmdet3d.core.bbox.structures import (Box3DMode, CameraInstance3DBoxes,
+                                          DepthInstance3DBoxes,
                                           LiDARInstance3DBoxes,
                                           rotation_3d_in_axis)
 from mmdet3d.core.post_processing import aligned_bev_nms
@@ -49,6 +50,7 @@ class SSD3DHead(nn.Module):
     def __init__(self,
                  num_classes,
                  bbox_coder,
+                 coord_type='Lidar',
                  num_candidates=256,
                  in_channels=256,
                  train_cfg=None,
@@ -71,6 +73,7 @@ class SSD3DHead(nn.Module):
         super(SSD3DHead, self).__init__()
         self.num_classes = num_classes
         self.num_candidates = num_candidates
+        self.coord_type = coord_type
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
         self.num_proposal = vote_aggregation_cfg['num_point']
@@ -311,6 +314,8 @@ class SSD3DHead(nn.Module):
                 size=bbox_preds['size']))
         pred_bbox3d = pred_bbox3d.reshape(-1, pred_bbox3d.shape[-1])
 
+        if self.coord_type == 'Camera':
+            pred_bbox3d = pred_bbox3d[:, [0, 2, 1, 3, 5, 4, 6]]
         pred_bbox3d = img_metas[0]['box_type_3d'](
             pred_bbox3d.clone(),
             # pred_bbox3d[:, [0, 2, 1, 3, 5, 4, 6]].clone(),
@@ -397,8 +402,6 @@ class SSD3DHead(nn.Module):
              seed_points)
 
         center_targets = torch.stack(center_targets)
-        center_targets -= bbox_preds['aggregated_points']
-        # center_targets -= bbox_preds['aggregated_points'][:, :, [0, 2, 1]]
         positive_mask = torch.stack(positive_mask)
         negative_mask = torch.stack(negative_mask)
         dir_class_targets = torch.stack(dir_class_targets)
@@ -409,6 +412,13 @@ class SSD3DHead(nn.Module):
         corner3d_targets = torch.stack(corner3d_targets)
         vote_targets = torch.stack(vote_targets)
         vote_mask = torch.stack(vote_mask)
+        if self.coord_type == 'Camera':
+            center_targets = center_targets[:, :, [0, 2, 1]]
+            size_res_targets = size_res_targets[:, :, [0, 2, 1]]
+            vote_targets = vote_targets[:, :, [0, 2, 1]]
+
+        center_targets -= bbox_preds['aggregated_points']
+        # center_targets -= bbox_preds['aggregated_points'][:, :, [0, 2, 1]]
 
         centerness_weights = (positive_mask +
                               negative_mask).unsqueeze(-1).repeat(
@@ -466,7 +476,7 @@ class SSD3DHead(nn.Module):
         ################
         # import numpy as np
         # gt_boxes_3d = points.new_tensor(
-        # np.load('../3DSSD/gt_boxes_3d.npy')[0])
+        #     np.load('../3DSSD/gt_boxes_3d.npy')[0])
         # gt_labels_3d = points.new_tensor(
         #     np.load('../3DSSD/gt_classes.npy')[0]).long()
         # gt_labels_3d -= 1
@@ -481,6 +491,10 @@ class SSD3DHead(nn.Module):
         (center_targets, size_targets, dir_class_targets,
          dir_res_targets) = self.bbox_coder.encode(gt_bboxes_3d, gt_labels_3d)
 
+        if self.coord_type == 'Camera':
+            aggregated_points = aggregated_points[:, [0, 2, 1]]
+            seed_points = seed_points[:, [0, 2, 1]]
+
         points_mask, assignment = self._assign_targets_by_points_inside(
             gt_bboxes_3d, aggregated_points)
         # gt_bboxes_3d, aggregated_points[:, [0, 2, 1]])
@@ -493,7 +507,10 @@ class SSD3DHead(nn.Module):
         corner3d_targets = gt_corner3d[assignment]
 
         top_center_targets = center_targets.clone()
-        top_center_targets[:, 2] += size_res_targets[:, 2]
+        if self.coord_type == 'Camera':
+            top_center_targets[:, 2] -= size_res_targets[:, 2]
+        else:
+            top_center_targets[:, 2] += size_res_targets[:, 2]
         dist = torch.norm(aggregated_points - top_center_targets, dim=1)
         # aggregated_points[:, [0, 2, 1]] - top_center_targets, dim=1)
 
@@ -545,7 +562,12 @@ class SSD3DHead(nn.Module):
         # Vote loss targets
         enlarged_gt_bboxes_3d = gt_bboxes_3d.enlarged_box(
             self.train_cfg.expand_dims_length)
-        enlarged_gt_bboxes_3d.tensor[:, 2] -= self.train_cfg.expand_dims_length
+        if self.coord_type == 'Camera':
+            enlarged_gt_bboxes_3d.tensor[:, 2] += \
+                self.train_cfg.expand_dims_length
+        else:
+            enlarged_gt_bboxes_3d.tensor[:, 2] -= \
+                self.train_cfg.expand_dims_length
         vote_mask, vote_assignment = self._assign_targets_by_points_inside(
             enlarged_gt_bboxes_3d, seed_points)
         # enlarged_gt_bboxes_3d, seed_points[:, [0, 2, 1]])
@@ -576,6 +598,8 @@ class SSD3DHead(nn.Module):
         sem_scores = F.sigmoid(bbox_preds['obj_scores']).transpose(1, 2)
         obj_scores = sem_scores.max(-1)[0]
         bbox3d = self.bbox_coder.decode(bbox_preds)
+        if self.coord_type == 'Camera':
+            bbox3d = bbox3d[:, :, [0, 2, 1, 3, 5, 4, 6]]
 
         batch_size = bbox3d.shape[0]
         results = list()
@@ -583,10 +607,23 @@ class SSD3DHead(nn.Module):
             bbox_selected, score_selected, labels = self.multiclass_nms_single(
                 obj_scores[b], sem_scores[b], bbox3d[b], points[b, ..., :3],
                 input_metas[b])
-            bbox = input_metas[b]['box_type_3d'](
-                bbox_selected.clone(),
-                box_dim=bbox_selected.shape[-1],
-                with_yaw=self.bbox_coder.with_rot)
+
+            if self.coord_type == 'Camera':
+                bbox_selected = bbox_selected[:, [0, 2, 1, 3, 5, 4, 6]]
+                bbox = CameraInstance3DBoxes(
+                    bbox_selected.clone(),
+                    box_dim=bbox_selected.shape[-1],
+                    with_yaw=self.bbox_coder.with_rot,
+                    origin=(0.5, -0.5, 0)).convert_to(
+                        Box3DMode.LIDAR,
+                        bbox_selected.new_tensor(
+                            input_metas[b]['lidar2rect']).inverse())
+
+            else:
+                bbox = input_metas[b]['box_type_3d'](
+                    bbox_selected.clone(),
+                    box_dim=bbox_selected.shape[-1],
+                    with_yaw=self.bbox_coder.with_rot)
             results.append((bbox, score_selected, labels))
 
         return results
@@ -606,11 +643,16 @@ class SSD3DHead(nn.Module):
             tuple[torch.Tensor]: Bounding boxes, scores and labels.
         """
         num_bbox = bbox.shape[0]
+        if self.coord_type == 'Camera':
+            origin = (0.5, 0.5, 0.5)
+        else:
+            origin = (0.5, 0.5, 1.0)
         bbox = input_meta['box_type_3d'](
             bbox.clone(),
             box_dim=bbox.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
-            origin=(0.5, 0.5, 1.0))
+            origin=origin)
+        # origin=(0.5, 0.5, 1.0))
 
         if isinstance(bbox, LiDARInstance3DBoxes):
             box_idx = bbox.points_in_boxes(points)

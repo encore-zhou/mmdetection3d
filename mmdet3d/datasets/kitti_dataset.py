@@ -114,6 +114,7 @@ class KittiDataset(Custom3DDataset):
         Trv2c = info['calib']['Tr_velo_to_cam'].astype(np.float32)
         P2 = info['calib']['P2'].astype(np.float32)
         lidar2img = P2 @ rect @ Trv2c
+        lidar2rect = rect @ Trv2c
 
         pts_filename = self._get_pts_filename(sample_idx)
         input_dict = dict(
@@ -121,7 +122,8 @@ class KittiDataset(Custom3DDataset):
             pts_filename=pts_filename,
             img_prefix=None,
             img_info=dict(filename=img_filename),
-            lidar2img=lidar2img)
+            lidar2img=lidar2img,
+            lidar2rect=lidar2rect)
 
         if not self.test_mode:
             annos = self.get_ann_info(index)

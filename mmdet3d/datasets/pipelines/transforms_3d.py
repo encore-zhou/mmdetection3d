@@ -709,3 +709,44 @@ class BackgroundPointsFilter(object):
         repr_str += '(bbox_enlarge_range={})'.format(
             self.bbox_enlarge_range.tolist())
         return repr_str
+
+
+@PIPELINES.register_module()
+class KittiLidar2Camera(object):
+    """Transform points cloud and bounding boxes from Lidar coordinate to
+    Camera coordinate."""
+
+    def __call__(self, input_dict):
+        """Call function to filter points by the range.
+
+        Args:
+            input_dict (dict): Result dict from loading pipeline.
+
+        Returns:
+            dict: Results after transform coordinate.
+        """
+        points = input_dict['points']
+        rot = input_dict['lidar2rect']
+        points[:, :3] = np.dot(rot[:3, :3], points[:, :3].transpose(
+            1, 0)).transpose(1, 0) + rot[:3, 3].reshape(1, 3)
+        input_dict['points'] = points
+        if 'gt_bboxes_3d' in input_dict.keys():
+            gt_bboxes_3d = input_dict['gt_bboxes_3d']
+            rot = gt_bboxes_3d.center.new_tensor(rot)
+            gt_bboxes_3d.tensor[:, :3] = rot[:3, :3].matmul(
+                gt_bboxes_3d.center.transpose(1, 0)).transpose(
+                    1, 0) + rot[:3, 3].reshape(1, 3)
+            gt_bboxes_3d.tensor[:, 1:3] = gt_bboxes_3d.tensor[:, [2, 1]]
+            gt_bboxes_3d.tensor[:, 3:6] = gt_bboxes_3d.tensor[:, [4, 3, 5]]
+            gt_bboxes_3d.tensor[:, 2] -= gt_bboxes_3d.tensor[:, 5] / 2.
+            input_dict['gt_bboxes_3d'] = gt_bboxes_3d
+        # import pdb
+        # pdb.set_trace()
+        # np.save('points', points[:, :3])
+        # np.save('corners', gt_bboxes_3d.corners)
+        return input_dict
+
+    def __repr__(self):
+        """str: Return a string that describes the module."""
+        repr_str = self.__class__.__name__
+        return repr_str
