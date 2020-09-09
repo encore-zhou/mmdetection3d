@@ -100,6 +100,7 @@ class VoteModule(nn.Module):
 
         votes = votes.transpose(2, 1).view(batch_size, num_seed,
                                            self.vote_per_seed, -1)
+
         offset = votes[:, :, :, 0:3]
         if self.clip_xyz_offset is not None:
             limited_offset = offset.clone()
@@ -150,7 +151,7 @@ class VoteModule(nn.Module):
         seed_indices_expand = seed_indices.unsqueeze(-1).repeat(
             1, 1, 3 * self.gt_per_seed)
         seed_gt_votes = torch.gather(vote_targets, 1, seed_indices_expand)
-        seed_gt_votes += seed_points.repeat(1, 1, 3)
+        seed_gt_votes += seed_points.repeat(1, 1, self.gt_per_seed)
 
         weight = seed_gt_votes_mask / (torch.sum(seed_gt_votes_mask) + 1e-6)
         distance = self.vote_loss(

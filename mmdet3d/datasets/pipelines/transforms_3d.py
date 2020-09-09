@@ -105,9 +105,7 @@ class RandomFlip3D(RandomFlip):
         """str: Return a string that describes the module."""
         repr_str = self.__class__.__name__
         repr_str += '(sync_2d={},'.format(self.sync_2d)
-        repr_str += '(flip_ratio_bev_horizontal={},'.format(
-            self.flip_ratio_bev_horizontal)
-        repr_str += '(flip_ratio_bev_vertical={},'.format(
+        repr_str += 'flip_ratio_bev_vertical={})'.format(
             self.flip_ratio_bev_vertical)
         return repr_str
 
@@ -740,10 +738,6 @@ class KittiLidar2Camera(object):
             gt_bboxes_3d.tensor[:, 3:6] = gt_bboxes_3d.tensor[:, [4, 3, 5]]
             gt_bboxes_3d.tensor[:, 2] -= gt_bboxes_3d.tensor[:, 5] / 2.
             input_dict['gt_bboxes_3d'] = gt_bboxes_3d
-        # import pdb
-        # pdb.set_trace()
-        # np.save('points', points[:, :3])
-        # np.save('corners', gt_bboxes_3d.corners)
         return input_dict
 
     def __repr__(self):

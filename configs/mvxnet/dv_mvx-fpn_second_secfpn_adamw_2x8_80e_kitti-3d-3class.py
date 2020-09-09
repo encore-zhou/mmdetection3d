@@ -228,7 +228,7 @@ optimizer = dict(type='AdamW', lr=0.003, betas=(0.95, 0.99), weight_decay=0.01)
 # max_norm=10 is better for SECOND
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(
-    policy='CosineAnealing',
+    policy='CosineAnnealing',
     warmup='linear',
     warmup_iters=1000,
     warmup_ratio=1.0 / 10,
@@ -249,6 +249,7 @@ total_epochs = 40
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = None
-load_from = './pretrain_mmdet/mvx_faster_rcnn_detectron2-caffe_20e_coco-pretrain_gt-sample_kitti-3-class_moderate-79.3_20200207-a4a6a3c7.pth'  # noqa
+# You may need to download the model first is the network is unstable
+load_from = 'https://openmmlab.oss-accelerate.aliyuncs.com/mmdetection3d/pretrain_models/mvx_faster_rcnn_detectron2-caffe_20e_coco-pretrain_gt-sample_kitti-3-class_moderate-79.3_20200207-a4a6a3c7.pth'  # noqa
 resume_from = None
 workflow = [('train', 1)]
