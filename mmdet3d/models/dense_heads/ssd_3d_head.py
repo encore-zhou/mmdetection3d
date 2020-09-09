@@ -8,7 +8,7 @@ from mmdet3d.core.bbox.structures import (Box3DMode, CameraInstance3DBoxes,
                                           rotation_3d_in_axis)
 from mmdet3d.core.post_processing import aligned_bev_nms
 from mmdet3d.models.builder import build_loss
-from mmdet3d.ops import PointSAModuleMSG
+from mmdet3d.ops import build_sa_module
 from mmdet.core import build_bbox_coder, multi_apply
 from mmdet.models import HEADS
 
@@ -108,7 +108,7 @@ class SSD3DHead(nn.Module):
         self.candidate_points_layers.add_module(
             'pred', nn.Conv1d(candidate_points_mlps[-1], 3, 1))
 
-        self.vote_aggregation = PointSAModuleMSG(**vote_aggregation_cfg)
+        self.vote_aggregation = build_sa_module(vote_aggregation_cfg)
 
         prev_channel = sum(
             [_[-1] for _ in vote_aggregation_cfg['mlp_channels']])
@@ -189,9 +189,9 @@ class SSD3DHead(nn.Module):
         Returns:
             dict: Predictions of SSD3D head.
         """
-        seed_points = feat_dict['sa_xyz']
-        seed_features = feat_dict['sa_features']
-        seed_indices = feat_dict['sa_indices']
+        seed_points = feat_dict['sa_xyz'][-1]
+        seed_features = feat_dict['sa_features'][-1]
+        seed_indices = feat_dict['sa_indices'][-1]
 
         # 1. generate candidate points from seed_points
         candidate_offset = self.candidate_points_layers(

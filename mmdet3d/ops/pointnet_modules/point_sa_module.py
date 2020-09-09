@@ -36,6 +36,9 @@ class PointSAModuleMSG(nn.Module):
             Default: 'max_pool'.
         normalize_xyz (bool): Whether to normalize local XYZ with radius.
             Default: False.
+        bias (bool | str): If specified as `auto`, it will be decided by the
+            norm_cfg. Bias will be set as True if `norm_cfg` is None, otherwise
+            False. Default: "auto".
     """
 
     def __init__(self,

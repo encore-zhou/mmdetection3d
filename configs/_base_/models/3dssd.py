@@ -13,13 +13,20 @@ model = dict(
         fps_mods=(('D-FPS'), ('FS'), ('F-FPS', 'D-FPS')),
         fps_sample_range_lists=((-1), (-1), (512, -1)),
         norm_cfg=dict(type='BN2d', eps=1e-3, momentum=0.1),
-        pool_mod='max',
-        normalize_xyz=False),
+        sa_cfg=dict(
+            type='PointSAModuleMSG',
+            pool_mod='max',
+            use_xyz=True,
+            normalize_xyz=False),
+        # pool_mod='max',
+        # normalize_xyz=False
+    ),
     bbox_head=dict(
         type='SSD3DHead',
         in_channels=256,
         num_candidates=256,
         vote_aggregation_cfg=dict(
+            type='PointSAModuleMSG',
             num_point=256,
             radii=(4.8, 6.4),
             sample_nums=(16, 32),
@@ -62,8 +69,8 @@ test_cfg = dict(
 # This schedule is mainly used by models on indoor dataset,
 # e.g., VoteNet on SUNRGBD and ScanNet
 lr = 0.002  # max learning rate
-optimizer = dict(type='Adam', lr=lr, weight_decay=0.01)
-optimizer_config = dict(grad_clip=dict(max_norm=10, norm_type=2))
-lr_config = dict(policy='step', warmup=None, step=[48, 64])
+optimizer = dict(type='AdamW', lr=lr, weight_decay=0)
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+lr_config = dict(policy='step', warmup=None, step=[40, 80])
 # runtime settings
-total_epochs = 72
+total_epochs = 100

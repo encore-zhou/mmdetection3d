@@ -55,7 +55,7 @@ class PointNet2SAMSG(BasePointNet):
                      type='PointSAModuleMSG',
                      pool_mod='max',
                      use_xyz=True,
-                     normalize_xyz=True)):
+                     normalize_xyz=False)):
         super().__init__()
         self.num_sa = len(sa_channels)
         self.out_indices = out_indices
