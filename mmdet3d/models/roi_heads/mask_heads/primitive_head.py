@@ -137,8 +137,8 @@ class PrimitiveHead(nn.Module):
         results['pred_flag_' + self.primitive_mode] = primitive_flag
 
         # 1. generate vote_points from seed_points
-        vote_points, vote_features = self.vote_module(seed_points,
-                                                      seed_features)
+        vote_points, vote_features, _ = self.vote_module(
+            seed_points, seed_features)
         results['vote_' + self.primitive_mode] = vote_points
         results['vote_features_' + self.primitive_mode] = vote_features
 

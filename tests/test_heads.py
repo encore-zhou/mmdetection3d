@@ -666,9 +666,9 @@ def test_ssd_3d_head():
     _setup_seed(0)
     ssd_3d_head_cfg = _get_vote_head_cfg('3dssd/3dssd_kitti-3d-car.py')
     self = build_head(ssd_3d_head_cfg).cuda()
-    sa_xyz = torch.rand([2, 256, 3], dtype=torch.float32).cuda()
-    sa_features = torch.rand([2, 256, 256], dtype=torch.float32).cuda()
-    sa_indices = torch.randint(0, 128, [2, 256]).cuda()
+    sa_xyz = [torch.rand([2, 256, 3], dtype=torch.float32).cuda()]
+    sa_features = [torch.rand([2, 256, 256], dtype=torch.float32).cuda()]
+    sa_indices = [torch.randint(0, 128, [2, 256]).cuda()]
 
     input_dict = dict(
         sa_xyz=sa_xyz, sa_features=sa_features, sa_indices=sa_indices)
