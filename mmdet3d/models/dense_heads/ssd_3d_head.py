@@ -1,7 +1,6 @@
 import torch
 from mmcv.cnn import ConvModule
 from torch import nn as nn
-from torch.nn import functional as F
 
 from mmdet3d.core.bbox.structures import (Box3DMode, CameraInstance3DBoxes,
                                           DepthInstance3DBoxes,
@@ -12,6 +11,8 @@ from mmdet3d.models.builder import build_loss
 from mmdet3d.ops import PointSAModuleMSG
 from mmdet.core import build_bbox_coder, multi_apply
 from mmdet.models import HEADS
+
+# from torch.nn import functional as F
 
 
 @HEADS.register_module()
@@ -595,7 +596,8 @@ class SSD3DHead(nn.Module):
             list[tuple[torch.Tensor]]: Bounding boxes, scores and labels.
         """
         # decode boxes
-        sem_scores = F.sigmoid(bbox_preds['obj_scores']).transpose(1, 2)
+        # sem_scores = F.sigmoid(bbox_preds['obj_scores']).transpose(1, 2)
+        sem_scores = bbox_preds['obj_scores'].transpose(1, 2)
         obj_scores = sem_scores.max(-1)[0]
         bbox3d = self.bbox_coder.decode(bbox_preds)
         if self.coord_type == 'Camera':
@@ -603,10 +605,17 @@ class SSD3DHead(nn.Module):
 
         batch_size = bbox3d.shape[0]
         results = list()
+
         for b in range(batch_size):
             bbox_selected, score_selected, labels = self.multiclass_nms_single(
                 obj_scores[b], sem_scores[b], bbox3d[b], points[b, ..., :3],
                 input_metas[b])
+            # import numpy as np
+            # bbox_selected_cp = bbox_selected.clone()
+            # print(bbox_selected[:, :6].sum() + bbox_selected[:, 5].sum(),
+            #       ((bbox_selected[:, 6] + 2*np.pi) % (2*np.pi)).sum())
+            # import pdb
+            # pdb.set_trace()
 
             if self.coord_type == 'Camera':
                 bbox_selected = bbox_selected[:, [0, 2, 1, 3, 5, 4, 6]]

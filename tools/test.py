@@ -11,7 +11,6 @@ from mmdet3d.datasets import build_dataloader, build_dataset
 from mmdet3d.models import build_detector
 from mmdet.apis import multi_gpu_test, set_random_seed
 from mmdet.core import wrap_fp16_model
-from tools.fuse_conv_bn import fuse_module
 
 
 def parse_args():
@@ -116,8 +115,8 @@ def main():
     if fp16_cfg is not None:
         wrap_fp16_model(model)
     checkpoint = load_checkpoint(model, args.checkpoint, map_location='cpu')
-    if args.fuse_conv_bn:
-        model = fuse_module(model)
+    # if args.fuse_conv_bn:
+    #     model = fuse_module(model)
     # old versions did not save class info in checkpoints, this walkaround is
     # for backward compatibility
     if 'CLASSES' in checkpoint['meta']:

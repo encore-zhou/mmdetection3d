@@ -5,6 +5,7 @@ dataset_type = 'KittiDataset'
 data_root = 'data/kitti/'
 class_names = ['Car']
 point_cloud_range = [0, -40, -5, 70, 40, 3]
+# point_cloud_range = [-40, -5, 0, 40, 3, 70]
 input_modality = dict(use_lidar=True, use_camera=False)
 db_sampler = dict(
     data_root=data_root,
@@ -12,7 +13,8 @@ db_sampler = dict(
     rate=1.0,
     prepare=dict(filter_by_difficulty=[-1], filter_by_min_points=dict(Car=5)),
     classes=class_names,
-    sample_groups=dict(Car=15))
+    sample_groups=dict(Car=15),
+    enlarge_range=[0.5, 0.5, 2.0])
 
 file_client_args = dict(backend='disk')
 # Uncomment the following if use ceph or other file clients.
@@ -39,9 +41,9 @@ train_pipeline = [
     dict(
         type='ObjectNoise',
         num_try=100,
-        translation_std=[1.0, 1.0, 0.5],
+        translation_std=[1.0, 1.0, 0],
         global_rot_range=[0.0, 0.0],
-        rot_range=[-0.78539816, 0.78539816]),
+        rot_range=[-1.0471975511965976, 1.0471975511965976]),
     dict(
         type='GlobalRotScaleTrans',
         rot_range=[-0.78539816, 0.78539816],
@@ -82,7 +84,7 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=6,
+    samples_per_gpu=4,
     workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
@@ -123,7 +125,7 @@ data = dict(
         test_mode=True,
         box_type_3d='LiDAR'))
 
-evaluation = dict(interval=10)
+evaluation = dict(interval=5)
 
 # model settings
 model = dict(

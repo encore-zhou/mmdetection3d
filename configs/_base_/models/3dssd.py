@@ -12,7 +12,7 @@ model = dict(
         aggregation_channels=(64, 128, 256),
         fps_mods=(('D-FPS'), ('FS'), ('F-FPS', 'D-FPS')),
         fps_sample_range_lists=((-1), (-1), (512, -1)),
-        norm_cfg=dict(type='BN2d', eps=1e-3),
+        norm_cfg=dict(type='BN2d', eps=1e-3, momentum=0.1),
         pool_mod='max',
         normalize_xyz=False),
     bbox_head=dict(
@@ -24,7 +24,7 @@ model = dict(
             radii=(4.8, 6.4),
             sample_nums=(16, 32),
             mlp_channels=((256, 256, 256, 512), (256, 256, 512, 1024)),
-            norm_cfg=dict(type='BN2d', eps=1e-3),
+            norm_cfg=dict(type='BN2d', eps=1e-3, momentum=0.1),
             use_xyz=True,
             normalize_xyz=False,
             bias=True),
@@ -32,7 +32,7 @@ model = dict(
         cls_pred_mlps=(128, ),
         reg_pred_mlps=(128, ),
         conv_cfg=dict(type='Conv1d'),
-        norm_cfg=dict(type='BN1d', eps=1e-3),
+        norm_cfg=dict(type='BN1d', eps=1e-3, momentum=0.1),
         objectness_loss=dict(
             type='CrossEntropyLoss',
             use_sigmoid=True,
@@ -48,9 +48,9 @@ model = dict(
             type='SmoothL1Loss', reduction='sum', loss_weight=1.0),
         corner_loss=dict(
             type='SmoothL1Loss', reduction='sum', loss_weight=1.0),
-        vote_loss=dict(type='SmoothL1Loss', reduction='sum', loss_weight=1.5)))
+        vote_loss=dict(type='SmoothL1Loss', reduction='sum', loss_weight=1.0)))
 # model training and testing settings
-train_cfg = dict(pos_distance_thr=10.0, expand_dims_length=0.1)
+train_cfg = dict(pos_distance_thr=10.0, expand_dims_length=0.05)
 test_cfg = dict(
     nms_thr=0.1,
     score_thr=0.0,
