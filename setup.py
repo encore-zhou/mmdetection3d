@@ -310,7 +310,12 @@ if __name__ == '__main__':
                 name='gather_points_ext',
                 module='mmdet3d.ops.gather_points',
                 sources=['src/gather_points.cpp'],
-                sources_cuda=['src/gather_points_cuda.cu'])
+                sources_cuda=['src/gather_points_cuda.cu']),
+            make_cuda_ext(
+                name='feat_distance_ext',
+                module='mmdet3d.ops.feat_distance',
+                sources=['src/feat_distance.cpp'],
+                sources_cuda=['src/feat_distance_cuda.cu'])
         ],
         cmdclass={'build_ext': BuildExtension},
         zip_safe=False)
