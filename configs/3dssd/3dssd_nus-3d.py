@@ -39,7 +39,7 @@ train_pipeline = [
         file_client_args=file_client_args),
     dict(
         type='LoadPointsFromMultiSweeps',
-        sweeps_num=5,
+        sweeps_num=10,
         pad_empty_sweeps=True,
         file_client_args=file_client_args),
     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
@@ -71,7 +71,7 @@ test_pipeline = [
         file_client_args=file_client_args),
     dict(
         type='LoadPointsFromMultiSweeps',
-        sweeps_num=5,
+        sweeps_num=10,
         file_client_args=file_client_args),
     dict(
         type='MultiScaleFlipAug3D',

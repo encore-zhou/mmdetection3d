@@ -3,6 +3,7 @@ model = dict(
     backbone=dict(
         type='PointNet2SAMSG',
         in_channels=4,
+        out_indices=(3, ),
         num_points=((4096, 12288), (1024, 2048), (512, 1024), (1024)),
         # num_points=((1024, 3072), (256, 512), (128, 256), (256)),
         radii=((0.5, 1.0), (1.0, 2.0), (2.0, 4.0), (4.0, 8.0)),
@@ -83,14 +84,14 @@ train_cfg = dict(
             point_cloud_range=[-50, -50, -4, 50, 50, 2],
             max_num_points=1,
             max_voxels=16384),
-        # max_num_points=1, max_voxels=4096),
+        # max_voxels=4096),
         dict(
             voxel_size=[0.1, 0.1, 0.1],
             point_cloud_range=[-50, -50, -4, 50, 50, 2],
             max_num_points=1,
             max_voxels=49152)
+        # max_voxels=12288)
     ])
-# max_num_points=1, max_voxels=12258)])
 test_cfg = dict(
     nms_cfg=dict(type='nms', iou_thr=0.1),
     sample_mod='spec',
