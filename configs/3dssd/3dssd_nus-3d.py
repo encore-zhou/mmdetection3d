@@ -52,6 +52,18 @@ train_pipeline = [
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
+    dict(
+        type='SweepPointSample',
+        cur_sweep_cfg=dict(
+            voxel_size=[0.1, 0.1, 0.1],
+            point_cloud_range=[-50, -50, -4, 50, 50, 2],
+            max_num_points=1,
+            max_voxels=16384),
+        prev_sweep_cfg=dict(
+            voxel_size=[0.1, 0.1, 0.1],
+            point_cloud_range=[-50, -50, -4, 50, 50, 2],
+            max_num_points=1,
+            max_voxels=49152)),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
     dict(
         type='Collect3D',
@@ -87,6 +99,18 @@ test_pipeline = [
             dict(type='RandomFlip3D'),
             dict(
                 type='PointsRangeFilter', point_cloud_range=point_cloud_range),
+            dict(
+                type='SweepPointSample',
+                cur_sweep_cfg=dict(
+                    voxel_size=[0.1, 0.1, 0.1],
+                    point_cloud_range=[-50, -50, -4, 50, 50, 2],
+                    max_num_points=1,
+                    max_voxels=16384),
+                prev_sweep_cfg=dict(
+                    voxel_size=[0.1, 0.1, 0.1],
+                    point_cloud_range=[-50, -50, -4, 50, 50, 2],
+                    max_num_points=1,
+                    max_voxels=49152)),
             dict(
                 type='DefaultFormatBundle3D',
                 class_names=class_names,

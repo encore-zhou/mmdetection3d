@@ -74,41 +74,13 @@ model = dict(
 
 # model training and testing settings
 train_cfg = dict(
-    sample_mod='spec',
-    pos_distance_thr=10.0,
-    expand_dims_length=0.05,
-    use_voxel_sample=True,
-    voxel_sampler_cfg=[
-        dict(
-            voxel_size=[0.1, 0.1, 0.1],
-            point_cloud_range=[-50, -50, -4, 50, 50, 2],
-            max_num_points=1,
-            max_voxels=16384),
-        dict(
-            voxel_size=[0.1, 0.1, 0.1],
-            point_cloud_range=[-50, -50, -4, 50, 50, 2],
-            max_num_points=1,
-            max_voxels=49152)
-    ])
+    sample_mod='spec', pos_distance_thr=10.0, expand_dims_length=0.05)
 test_cfg = dict(
     nms_cfg=dict(type='nms', iou_thr=0.1),
     sample_mod='spec',
     score_thr=0.0,
     per_class_proposal=False,
-    max_output_num=500,
-    use_voxel_sample=True,
-    voxel_sampler_cfg=[
-        dict(
-            voxel_size=[0.1, 0.1, 0.1],
-            point_cloud_range=[-50, -50, -4, 50, 50, 2],
-            max_num_points=1,
-            max_voxels=16384),
-        dict(
-            voxel_size=[0.1, 0.1, 0.1],
-            point_cloud_range=[-50, -50, -4, 50, 50, 2],
-            max_num_points=1,
-            max_voxels=49152)
-    ])
+    max_output_num=500)
 
 # optimizer
 # This schedule is mainly used by models on indoor dataset,
