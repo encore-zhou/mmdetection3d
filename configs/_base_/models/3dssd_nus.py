@@ -94,8 +94,8 @@ test_cfg = dict(
     nms_cfg=dict(type='nms', iou_thr=0.1),
     sample_mod='spec',
     score_thr=0.0,
-    per_class_proposal=True,
-    max_output_num=100,
+    per_class_proposal=False,
+    max_output_num=500,
     use_voxel_sample=True,
     voxel_sampler_cfg=[
         dict(
