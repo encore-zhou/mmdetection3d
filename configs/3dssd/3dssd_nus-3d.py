@@ -106,12 +106,12 @@ test_pipeline = [
 
 data = dict(
     samples_per_gpu=1,
-    workers_per_gpu=0,
+    workers_per_gpu=1,
     train=dict(pipeline=train_pipeline),
     val=dict(pipeline=test_pipeline),
     test=dict(pipeline=test_pipeline))
 
-evaluation = dict(interval=2)
+evaluation = dict(interval=1)
 
 # model settings
 model = dict(
@@ -124,9 +124,9 @@ model = dict(
 lr = 0.002  # max learning rate
 optimizer = dict(type='AdamW', lr=lr, weight_decay=0)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
-lr_config = dict(policy='step', warmup=None, step=[80, 120])
+lr_config = dict(policy='step', warmup=None, step=[8, 12])
 # runtime settings
-total_epochs = 150
+total_epochs = 15
 
 # yapf:disable
 log_config = dict(

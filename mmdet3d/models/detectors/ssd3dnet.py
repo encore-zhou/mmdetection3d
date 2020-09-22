@@ -25,14 +25,17 @@ class SSD3DNet(VoteNet):
             train_cfg=train_cfg,
             test_cfg=test_cfg,
             pretrained=pretrained)
-        self.cur_sweep_sampler = Voxelization(**train_cfg.voxel_sampler_cfg[0])
-        self.prev_sweep_sampler = Voxelization(
-            **train_cfg.voxel_sampler_cfg[1])
+        if 'use_voxel_sample' in self.test_cfg.keys() and \
+                self.test_cfg.use_voxel_sample:
+            self.cur_sweep_sampler = Voxelization(
+                **test_cfg.voxel_sampler_cfg[0])
+            self.prev_sweep_sampler = Voxelization(
+                **test_cfg.voxel_sampler_cfg[1])
 
     def _points_voxel_sampling(self, cur_points, sweeps_points):
         voxels, coors, num_points_per_voxel = self.cur_sweep_sampler(
             cur_points)
-        max_voxels = self.train_cfg.voxel_sampler_cfg[0].max_voxels
+        max_voxels = self.test_cfg.voxel_sampler_cfg[0].max_voxels
         if voxels.shape[0] >= max_voxels:
             cur_points = voxels[:max_voxels]
         else:
@@ -42,7 +45,7 @@ class SSD3DNet(VoteNet):
         voxels, coors, num_points_per_voxel = self.prev_sweep_sampler(
             sweeps_points)
 
-        max_voxels = self.train_cfg.voxel_sampler_cfg[1].max_voxels
+        max_voxels = self.test_cfg.voxel_sampler_cfg[1].max_voxels
         if voxels.shape[0] >= max_voxels:
             sweeps_points = voxels[:max_voxels]
         else:
@@ -54,7 +57,8 @@ class SSD3DNet(VoteNet):
 
     def _prepare_input(self, points, img_metas):
         """Prepare network inputs."""
-        if self.train_cfg.use_voxel_sample:
+        if 'use_voxel_sample' in self.test_cfg.keys() and \
+                self.test_cfg.use_voxel_sample:
             points_cat = []
             for idx in range(len(points)):
                 points_cat.append(

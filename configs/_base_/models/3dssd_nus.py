@@ -5,7 +5,6 @@ model = dict(
         in_channels=4,
         out_indices=(3, ),
         num_points=((4096, 12288), (1024, 2048), (512, 1024), (1024)),
-        # num_points=((1024, 3072), (256, 512), (128, 256), (256)),
         radii=((0.5, 1.0), (1.0, 2.0), (2.0, 4.0), (4.0, 8.0)),
         num_samples=((32, 64), (32, 64), (32, 32), (32, 32)),
         sa_channels=(((64, 64, 128), (64, 96, 128)), ((128, 128, 256),
@@ -15,7 +14,6 @@ model = dict(
         aggregation_channels=(64, 128, 256, 256),
         fps_mods=(('D-FPS', 'D-FPS'), ('FS', 'D-FPS'), ('FS', 'FS'), ('FS')),
         fps_sample_range_lists=((16384, -1), (4096, -1), (1024, -1), (-1)),
-        # fps_sample_range_lists=((4096, -1), (1024, -1), (256, -1), (-1)),
         dilated_group=(True, True, True, True),
         norm_cfg=dict(type='BN2d', eps=1e-3, momentum=0.1),
         sa_cfg=dict(
@@ -70,7 +68,9 @@ model = dict(
             type='SmoothL1Loss', reduction='sum', loss_weight=1.0),
         corner_loss=dict(
             type='SmoothL1Loss', reduction='sum', loss_weight=1.0),
-        vote_loss=dict(type='SmoothL1Loss', reduction='sum', loss_weight=1.0)))
+        vote_loss=dict(type='SmoothL1Loss', reduction='sum', loss_weight=1.0),
+        velocity_loss=dict(
+            type='SmoothL1Loss', reduction='sum', loss_weight=1.0)))
 
 # model training and testing settings
 train_cfg = dict(
@@ -84,13 +84,11 @@ train_cfg = dict(
             point_cloud_range=[-50, -50, -4, 50, 50, 2],
             max_num_points=1,
             max_voxels=16384),
-        # max_voxels=4096),
         dict(
             voxel_size=[0.1, 0.1, 0.1],
             point_cloud_range=[-50, -50, -4, 50, 50, 2],
             max_num_points=1,
             max_voxels=49152)
-        # max_voxels=12288)
     ])
 test_cfg = dict(
     nms_cfg=dict(type='nms', iou_thr=0.1),
@@ -98,7 +96,19 @@ test_cfg = dict(
     score_thr=0.0,
     per_class_proposal=True,
     max_output_num=100,
-    use_voxel_sample=True)
+    use_voxel_sample=True,
+    voxel_sampler_cfg=[
+        dict(
+            voxel_size=[0.1, 0.1, 0.1],
+            point_cloud_range=[-50, -50, -4, 50, 50, 2],
+            max_num_points=1,
+            max_voxels=16384),
+        dict(
+            voxel_size=[0.1, 0.1, 0.1],
+            point_cloud_range=[-50, -50, -4, 50, 50, 2],
+            max_num_points=1,
+            max_voxels=49152)
+    ])
 
 # optimizer
 # This schedule is mainly used by models on indoor dataset,
@@ -106,6 +116,6 @@ test_cfg = dict(
 lr = 0.002  # max learning rate
 optimizer = dict(type='AdamW', lr=lr, weight_decay=0)
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
-lr_config = dict(policy='step', warmup=None, step=[80, 120])
+lr_config = dict(policy='step', warmup=None, step=[8, 12])
 # runtime settings
-total_epochs = 150
+total_epochs = 15
