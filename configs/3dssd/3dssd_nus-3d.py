@@ -57,15 +57,13 @@ train_pipeline = [
         cur_sweep_cfg=dict(
             voxel_size=[0.1, 0.1, 0.1],
             point_cloud_range=[-50, -50, -4, 50, 50, 2],
-            random_voxel_num=16384,
             max_num_points=1,
-            max_voxels=9999999),
+            max_voxels=16384),
         prev_sweep_cfg=dict(
             voxel_size=[0.1, 0.1, 0.1],
             point_cloud_range=[-50, -50, -4, 50, 50, 2],
-            random_voxel_num=49152,
             max_num_points=1,
-            max_voxels=9999999)),
+            max_voxels=49152)),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
     dict(
         type='Collect3D',
@@ -106,15 +104,13 @@ test_pipeline = [
                 cur_sweep_cfg=dict(
                     voxel_size=[0.1, 0.1, 0.1],
                     point_cloud_range=[-50, -50, -4, 50, 50, 2],
-                    random_voxel_num=16384,
                     max_num_points=1,
-                    max_voxels=9999999),
+                    max_voxels=16384),
                 prev_sweep_cfg=dict(
                     voxel_size=[0.1, 0.1, 0.1],
                     point_cloud_range=[-50, -50, -4, 50, 50, 2],
-                    random_voxel_num=49152,
                     max_num_points=1,
-                    max_voxels=9999999)),
+                    max_voxels=49152)),
             dict(
                 type='DefaultFormatBundle3D',
                 class_names=class_names,

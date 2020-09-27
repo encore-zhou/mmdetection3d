@@ -715,13 +715,11 @@ class VoxelBasedPointSampler(object):
     """
 
     def __init__(self, cur_sweep_cfg, prev_sweep_cfg=None):
-        self.cur_voxel_num = cur_sweep_cfg.pop('random_voxel_num')
         self.cur_sweep_sampler = VoxelGenerator(**cur_sweep_cfg)
         if prev_sweep_cfg is not None:
-            self.prev_voxel_num = prev_sweep_cfg.pop('random_voxel_num')
             self.prev_sweep_sampler = VoxelGenerator(**prev_sweep_cfg)
         else:
-            self.prev_voxel_num = 0
+            self.prev_sweep_sampler = None
 
     def __call__(self, results):
         """Call function to sample points from multiple sweeps.
@@ -737,25 +735,38 @@ class VoxelBasedPointSampler(object):
         cur_points_num = results['cur_points_num']
         cur_sweep_points = points[:cur_points_num]
         prev_sweeps_points = points[cur_points_num:]
+        np.random.shuffle(cur_sweep_points)
+        np.random.shuffle(prev_sweeps_points)
 
         voxels, coors, num_points_per_voxel = self.cur_sweep_sampler.generate(
             cur_sweep_points)
-        max_voxels = self.cur_voxel_num
-        replace = True if voxels.shape[0] < max_voxels else False
-        choices = np.random.choice(
-            voxels.shape[0], max_voxels, replace=replace)
-        cur_sweep_points = voxels[choices]
+        if voxels.shape[0] < self.cur_sweep_sampler._max_voxels:
+            padding_points = np.zeros([
+                self.cur_sweep_sampler._max_voxels - voxels.shape[0],
+                points.shape[1]
+            ],
+                                      dtype=points.dtype)
+            padding_points[:] = voxels[0, 0]
+            cur_sweep_points = np.concatenate(
+                [voxels.squeeze(1), padding_points], axis=0)
+        else:
+            cur_sweep_points = voxels.squeeze(1)
 
-        if self.prev_voxel_num > 0:
+        if self.prev_sweep_sampler is not None:
             voxels, coors, num_points_per_voxel = \
                 self.prev_sweep_sampler.generate(prev_sweeps_points)
-            max_voxels = self.prev_voxel_num
-            replace = True if voxels.shape[0] < max_voxels else False
-            choices = np.random.choice(
-                voxels.shape[0], max_voxels, replace=replace)
-            prev_sweeps_points = voxels[choices]
-            points = np.concatenate([cur_sweep_points, prev_sweeps_points],
-                                    0).squeeze(1)
+            if voxels.shape[0] < self.prev_sweep_sampler._max_voxels:
+                padding_points = np.zeros([
+                    self.prev_sweep_sampler._max_voxels - voxels.shape[0],
+                    points.shape[1]
+                ],
+                                          dtype=points.dtype)
+                padding_points[:] = voxels[0, 0]
+                prev_sweeps_points = np.concatenate(
+                    [voxels.squeeze(1), padding_points], axis=0)
+            else:
+                prev_sweeps_points = voxels.squeeze(1)
+            points = np.concatenate([cur_sweep_points, prev_sweeps_points], 0)
             results['points'] = points
         else:
             results['points'] = cur_sweep_points
