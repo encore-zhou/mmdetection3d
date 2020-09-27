@@ -9,7 +9,7 @@ from .pipelines import (BackgroundPointsFilter, GlobalRotScaleTrans,
                         LoadPointsFromFile, LoadPointsFromMultiSweeps,
                         NormalizePointsColor, ObjectNoise, ObjectRangeFilter,
                         ObjectSample, PointShuffle, PointsRangeFilter,
-                        RandomFlip3D, SweepPointSample)
+                        RandomFlip3D, VoxelBasedPointSampler)
 from .scannet_dataset import ScanNetDataset
 from .sunrgbd_dataset import SUNRGBDDataset
 
@@ -21,5 +21,6 @@ __all__ = [
     'ObjectRangeFilter', 'PointsRangeFilter', 'Collect3D',
     'LoadPointsFromFile', 'NormalizePointsColor', 'IndoorPointSample',
     'LoadAnnotations3D', 'SUNRGBDDataset', 'ScanNetDataset', 'Custom3DDataset',
-    'LoadPointsFromMultiSweeps', 'BackgroundPointsFilter', 'SweepPointSample'
+    'LoadPointsFromMultiSweeps', 'BackgroundPointsFilter',
+    'VoxelBasedPointSampler'
 ]
