@@ -510,8 +510,8 @@ class PointsRangeFilter(object):
                 in the result dict.
         """
         points = input_dict['points']
-        points_mask = ((points[:, :3] >= self.pcd_range[:, :3]) &
-                       (points[:, :3] < self.pcd_range[:, 3:]))
+        points_mask = ((points[:, :3] >= self.pcd_range[:, :3])
+                       & (points[:, :3] < self.pcd_range[:, 3:]))
         points_mask = points_mask[:, 0] & points_mask[:, 1] & points_mask[:, 2]
         clean_points = points[points_mask, :]
         input_dict['points'] = clean_points
@@ -650,8 +650,8 @@ class BackgroundPointsFilter(object):
     """
 
     def __init__(self, bbox_enlarge_range):
-        assert (is_tuple_of(bbox_enlarge_range, float) and
-                len(bbox_enlarge_range) == 3) \
+        assert (is_tuple_of(bbox_enlarge_range, float)
+                and len(bbox_enlarge_range) == 3) \
             or isinstance(bbox_enlarge_range, float), \
             f'Invalid arguments bbox_enlarge_range {bbox_enlarge_range}'
 
@@ -741,23 +741,19 @@ class VoxelBasedPointSampler(object):
         voxels, coors, num_points_per_voxel = self.cur_sweep_sampler.generate(
             cur_sweep_points)
         max_voxels = self.cur_voxel_num
-        if voxels.shape[0] >= max_voxels:
-            cur_sweep_points = voxels[:max_voxels]
-        else:
-            choices = np.random.choice(
-                voxels.shape[0], max_voxels, replace=True)
-            cur_sweep_points = voxels[choices]
+        replace = True if voxels.shape[0] < max_voxels else False
+        choices = np.random.choice(
+            voxels.shape[0], max_voxels, replace=replace)
+        cur_sweep_points = voxels[choices]
 
         if self.prev_voxel_num > 0:
             voxels, coors, num_points_per_voxel = \
                 self.prev_sweep_sampler.generate(prev_sweeps_points)
             max_voxels = self.prev_voxel_num
-            if voxels.shape[0] >= max_voxels:
-                prev_sweeps_points = voxels[:max_voxels]
-            else:
-                choices = np.random.choice(
-                    voxels.shape[0], max_voxels, replace=True)
-                prev_sweeps_points = voxels[choices]
+            replace = True if voxels.shape[0] < max_voxels else False
+            choices = np.random.choice(
+                voxels.shape[0], max_voxels, replace=replace)
+            prev_sweeps_points = voxels[choices]
             points = np.concatenate([cur_sweep_points, prev_sweeps_points],
                                     0).squeeze(1)
             results['points'] = points
