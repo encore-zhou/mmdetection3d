@@ -149,8 +149,8 @@ class SSD3DHead(VoteHead):
         (vote_targets, center_targets, size_res_targets, dir_class_targets,
          dir_res_targets, mask_targets, centerness_targets, corner3d_targets,
          extra_targets, vote_mask, positive_mask, negative_mask,
-         centerness_weights, box_loss_weights,
-         heading_res_loss_weight) = targets
+         centerness_weights, box_loss_weights, heading_res_loss_weight,
+         proposal_recall, vote_recall) = targets
 
         # calculate centerness loss
         centerness_loss = self.objectness_loss(
@@ -227,6 +227,9 @@ class SSD3DHead(VoteHead):
                 weight=box_loss_weights.unsqueeze(-1))
             losses['veloc_loss'] = veloc_loss
 
+        losses['proposal_recall'] = vote_loss.new_tensor(
+            proposal_recall).mean()
+        losses['vote_recall'] = vote_loss.new_tensor(vote_recall).mean()
         return losses
 
     def get_targets(self,
@@ -276,10 +279,11 @@ class SSD3DHead(VoteHead):
 
         (vote_targets, center_targets, size_res_targets, dir_class_targets,
          dir_res_targets, mask_targets, extra_targets, centerness_targets,
-         corner3d_targets, vote_mask, positive_mask, negative_mask) = \
-            multi_apply(self.get_targets_single, points, gt_bboxes_3d,
-                        gt_labels_3d, pts_semantic_mask, pts_instance_mask,
-                        aggregated_points, seed_points)
+         corner3d_targets, vote_mask, positive_mask,
+         negative_mask, proposal_recall, vote_recall) = multi_apply(
+             self.get_targets_single, points, gt_bboxes_3d, gt_labels_3d,
+             pts_semantic_mask, pts_instance_mask, aggregated_points,
+             seed_points)
 
         center_targets = torch.stack(center_targets)
         positive_mask = torch.stack(positive_mask)
@@ -317,7 +321,8 @@ class SSD3DHead(VoteHead):
                 dir_class_targets, dir_res_targets, mask_targets,
                 centerness_targets, corner3d_targets, extra_targets, vote_mask,
                 positive_mask, negative_mask, centerness_weights,
-                box_loss_weights, heading_res_loss_weight)
+                box_loss_weights, heading_res_loss_weight, proposal_recall,
+                vote_recall)
 
     def get_targets_single(self,
                            points,
@@ -357,6 +362,9 @@ class SSD3DHead(VoteHead):
 
         points_mask, assignment = self._assign_targets_by_points_inside(
             gt_bboxes_3d, aggregated_points)
+
+        proposal_recall = assignment[
+            points_mask.sum(-1) > 0].unique().shape[0] / gt_labels_3d.shape[0]
 
         center_targets = center_targets[assignment]
         size_res_targets = size_targets[assignment]
@@ -424,10 +432,13 @@ class SSD3DHead(VoteHead):
         vote_targets = vote_targets[vote_assignment] - seed_points
         vote_mask = vote_mask.max(1)[0] > 0
 
+        vote_recall = vote_assignment[
+            vote_mask.sum(-1) > 0].unique().shape[0] / gt_labels_3d.shape[0]
+
         return (vote_targets, center_targets, size_res_targets,
                 dir_class_targets, dir_res_targets, mask_targets,
                 extra_targets, centerness_targets, corner3d_targets, vote_mask,
-                positive_mask, negative_mask)
+                positive_mask, negative_mask, proposal_recall, vote_recall)
 
     def get_bboxes(self, points, bbox_preds, input_metas, rescale=False):
         """Generate bboxes from sdd3d head predictions.
