@@ -16,6 +16,7 @@ from .roiaware_pool3d import (RoIAwarePool3d, points_in_boxes_batch,
                               points_in_boxes_cpu, points_in_boxes_gpu)
 from .sparse_block import (SparseBasicBlock, SparseBottleneck,
                            make_sparse_convmodule)
+from .spconv import points_to_voxel_3d_np
 from .utils import get_compiler_version, get_compiling_cuda_version
 from .voxel import DynamicScatter, Voxelization, dynamic_scatter, voxelization
 
@@ -32,5 +33,5 @@ __all__ = [
     'QueryAndGroup', 'PointSAModule', 'PointSAModuleMSG', 'PointFPModule',
     'points_in_boxes_batch', 'get_compiler_version',
     'get_compiling_cuda_version', 'Points_Sampler', 'build_sa_module',
-    'calc_feat_distance'
+    'calc_feat_distance', 'points_to_voxel_3d_np'
 ]

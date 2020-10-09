@@ -181,3 +181,13 @@ def indice_maxpool_backward(features, out_features, out_bp, indice_pairs,
             features, out_features, out_bp, indice_pairs, indice_pair_num)
     else:
         raise NotImplementedError
+
+
+def points_to_voxel_3d_np(points, voxel_size, coors_range,
+                          num_points_per_voxel, coor_to_voxelidx, voxels,
+                          coors, max_points, max_voxels):
+    return sparse_conv_ext.points_to_voxel_3d_np(points, voxels, coors,
+                                                 num_points_per_voxel,
+                                                 coor_to_voxelidx, voxel_size,
+                                                 coors_range, max_points,
+                                                 max_voxels)

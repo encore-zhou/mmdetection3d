@@ -14,6 +14,7 @@
 
 #include <cuda_runtime_api.h>
 #include <spconv/fused_spconv_ops.h>
+#include <spconv/point2voxel.h>
 #include <spconv/pool_ops.h>
 #include <spconv/spconv_ops.h>
 #include <torch/extension.h>
@@ -48,4 +49,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("indice_maxpool_backward_half",
         &spconv::indiceMaxPoolBackward<at::Half>,
         "indice_maxpool_backward_half");
+  m.def("points_to_voxel_3d_np", &spconv::points_to_voxel_3d_np<float, 3>,
+        "points_to_voxel_3d_np");
 }
