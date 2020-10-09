@@ -96,10 +96,10 @@ class SSD3DHead(VoteHead):
 
     def _get_reg_out_channels(self):
         """Return the channel number of regression outputs."""
-        # Bbox classification and regression
-        # (center residual (3), size regression (3)
-        # heading class+residual (num_dir_bins*2)),
         if self.num_sizes == 0:
+            # Bbox classification and regression
+            # (center residual (3), size regression (3)
+            # heading class+residual (num_dir_bins*2)),
             return 3 + 3 + self.num_dir_bins * 2 + self.extra_reg_dim
         else:
             return 3 + self.num_dir_bins * 2 + self.num_sizes * 4 +\
@@ -193,13 +193,13 @@ class SSD3DHead(VoteHead):
         else:
             size_class_loss = dir_res_loss * 0
 
+        # calculate size residual loss
         if one_hot_size_targets is not None:
             size_res_pred = bbox_preds['size_res'] * \
                 one_hot_size_targets.unsqueeze(-1)
             size_res_pred = size_res_pred.sum(dim=2)
         else:
             size_res_pred = bbox_preds['size_res']
-        # calculate size residual loss
         size_loss = self.size_res_loss(
             size_res_pred,
             size_res_targets,
@@ -561,11 +561,15 @@ class SSD3DHead(VoteHead):
             tuple[torch.Tensor]: Bounding boxes, scores and labels.
         """
         num_bbox = bbox.shape[0]
+        if isinstance(input_meta['box_type_3d'], LiDARInstance3DBoxes):
+            origin = (0.5, 0.5, 1.0)
+        else:
+            origin = (0.5, 0.5, 0.5)
         bbox = input_meta['box_type_3d'](
             bbox.clone(),
             box_dim=bbox.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
-            origin=(0.5, 0.5, 1.0))
+            origin=origin)
 
         if isinstance(bbox, LiDARInstance3DBoxes):
             box_idx = bbox.points_in_boxes(points)
