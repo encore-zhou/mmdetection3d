@@ -42,6 +42,7 @@ class SSD3DHead(VoteHead):
                  num_classes,
                  bbox_coder,
                  in_channels=256,
+                 use_anchor_free=True,
                  train_cfg=None,
                  test_cfg=None,
                  vote_module_cfg=None,
@@ -54,6 +55,7 @@ class SSD3DHead(VoteHead):
                  center_loss=None,
                  dir_class_loss=None,
                  dir_res_loss=None,
+                 size_class_loss=None,
                  size_res_loss=None,
                  corner_loss=None,
                  vote_loss=None,
@@ -73,10 +75,11 @@ class SSD3DHead(VoteHead):
             center_loss=center_loss,
             dir_class_loss=dir_class_loss,
             dir_res_loss=dir_res_loss,
-            size_class_loss=None,
+            size_class_loss=size_class_loss,
             size_res_loss=size_res_loss,
             semantic_loss=None)
 
+        self.use_anchor_free = use_anchor_free
         self.corner_loss = build_loss(corner_loss)
         self.vote_loss = build_loss(vote_loss)
         if velocity_loss is not None:
@@ -96,7 +99,11 @@ class SSD3DHead(VoteHead):
         # Bbox classification and regression
         # (center residual (3), size regression (3)
         # heading class+residual (num_dir_bins*2)),
-        return 3 + 3 + self.num_dir_bins * 2 + self.extra_reg_dim
+        if self.num_sizes == 0:
+            return 3 + 3 + self.num_dir_bins * 2 + self.extra_reg_dim
+        else:
+            return 3 + self.num_dir_bins * 2 + self.num_sizes * 4 +\
+                self.extra_reg_dim
 
     def _extract_input(self, feat_dict):
         """Extract inputs from features dictionary.
@@ -146,11 +153,12 @@ class SSD3DHead(VoteHead):
         targets = self.get_targets(points, gt_bboxes_3d, gt_labels_3d,
                                    pts_semantic_mask, pts_instance_mask,
                                    bbox_preds)
-        (vote_targets, center_targets, size_res_targets, dir_class_targets,
-         dir_res_targets, mask_targets, centerness_targets, corner3d_targets,
-         extra_targets, vote_mask, positive_mask, negative_mask,
-         centerness_weights, box_loss_weights, heading_res_loss_weight,
-         proposal_recall, vote_recall) = targets
+        (vote_targets, center_targets, size_class_targets, size_res_targets,
+         dir_class_targets, dir_res_targets, mask_targets, centerness_targets,
+         corner3d_targets, extra_targets, vote_mask, positive_mask,
+         negative_mask, centerness_weights, box_loss_weights,
+         one_hot_size_targets, heading_res_loss_weight, proposal_recall,
+         vote_recall) = targets
 
         # calculate centerness loss
         centerness_loss = self.objectness_loss(
@@ -176,9 +184,24 @@ class SSD3DHead(VoteHead):
             dir_res_targets.unsqueeze(-1).repeat(1, 1, self.num_dir_bins),
             weight=heading_res_loss_weight)
 
+        # calculate size class loss
+        if size_class_targets is not None:
+            size_class_loss = self.size_class_loss(
+                bbox_preds['size_class'].transpose(2, 1),
+                size_class_targets,
+                weight=box_loss_weights)
+        else:
+            size_class_loss = dir_res_loss * 0
+
+        if one_hot_size_targets is not None:
+            size_res_pred = bbox_preds['size_res'] * \
+                one_hot_size_targets.unsqueeze(-1)
+            size_res_pred = size_res_pred.sum(dim=2)
+        else:
+            size_res_pred = bbox_preds['size_res']
         # calculate size residual loss
         size_loss = self.size_res_loss(
-            bbox_preds['size'],
+            size_res_pred,
             size_res_targets,
             weight=box_loss_weights.unsqueeze(-1))
 
@@ -187,12 +210,15 @@ class SSD3DHead(VoteHead):
             bbox_preds['dir_class'].shape)
         one_hot_dir_class_targets.scatter_(2, dir_class_targets.unsqueeze(-1),
                                            1)
-        pred_bbox3d = self.bbox_coder.decode(
-            dict(
-                center=bbox_preds['center'],
-                dir_res=bbox_preds['dir_res'],
-                dir_class=one_hot_dir_class_targets,
-                size=bbox_preds['size']))
+        pred_bbox_dict = dict(
+            center=bbox_preds['center'],
+            dir_res=bbox_preds['dir_res'],
+            dir_class=one_hot_dir_class_targets,
+            size_res=bbox_preds['size_res'])
+        if size_class_targets is not None:
+            pred_bbox_dict['size_class'] = bbox_preds['size_class']
+
+        pred_bbox3d = self.bbox_coder.decode(pred_bbox_dict)
         pred_bbox3d = pred_bbox3d.reshape(-1, pred_bbox3d.shape[-1])
         pred_bbox3d = img_metas[0]['box_type_3d'](
             pred_bbox3d.clone(),
@@ -216,6 +242,7 @@ class SSD3DHead(VoteHead):
             center_loss=center_loss,
             dir_class_loss=dir_class_loss,
             dir_res_loss=dir_res_loss,
+            size_class_loss=size_class_loss,
             size_res_loss=size_loss,
             corner_loss=corner_loss,
             vote_loss=vote_loss)
@@ -230,6 +257,10 @@ class SSD3DHead(VoteHead):
         losses['proposal_recall'] = vote_loss.new_tensor(
             proposal_recall).mean()
         losses['vote_recall'] = vote_loss.new_tensor(vote_recall).mean()
+        losses['proposal_ratio'] = positive_mask.sum() / \
+            float(positive_mask.shape[1])
+        losses['vote_ratio'] = (vote_mask > 0).sum() / \
+            float(vote_mask.shape[1])
         return losses
 
     def get_targets(self,
@@ -277,9 +308,9 @@ class SSD3DHead(VoteHead):
             for i in range(len(gt_labels_3d))
         ]
 
-        (vote_targets, center_targets, size_res_targets, dir_class_targets,
-         dir_res_targets, mask_targets, extra_targets, centerness_targets,
-         corner3d_targets, vote_mask, positive_mask,
+        (vote_targets, center_targets, size_class_targets, size_res_targets,
+         dir_class_targets, dir_res_targets, mask_targets, extra_targets,
+         centerness_targets, corner3d_targets, vote_mask, positive_mask,
          negative_mask, proposal_recall, vote_recall) = multi_apply(
              self.get_targets_single, points, gt_bboxes_3d, gt_labels_3d,
              pts_semantic_mask, pts_instance_mask, aggregated_points,
@@ -296,8 +327,14 @@ class SSD3DHead(VoteHead):
         corner3d_targets = torch.stack(corner3d_targets)
         vote_targets = torch.stack(vote_targets)
         vote_mask = torch.stack(vote_mask)
+
         if extra_targets[0] is not None:
             extra_targets = torch.stack(extra_targets)
+
+        if size_class_targets[0] is not None:
+            size_class_targets = torch.stack(size_class_targets)
+        else:
+            size_class_targets = None
 
         center_targets -= bbox_preds['aggregated_points']
 
@@ -317,12 +354,20 @@ class SSD3DHead(VoteHead):
         heading_res_loss_weight = heading_label_one_hot * \
             box_loss_weights.unsqueeze(-1)
 
-        return (vote_targets, center_targets, size_res_targets,
-                dir_class_targets, dir_res_targets, mask_targets,
-                centerness_targets, corner3d_targets, extra_targets, vote_mask,
-                positive_mask, negative_mask, centerness_weights,
-                box_loss_weights, heading_res_loss_weight, proposal_recall,
-                vote_recall)
+        if self.num_sizes != 0:
+            one_hot_size_targets = size_class_targets.new_zeros(
+                (batch_size, proposal_num, self.num_sizes))
+            one_hot_size_targets.scatter_(2, size_class_targets.unsqueeze(-1),
+                                          1)
+        else:
+            one_hot_size_targets = None
+
+        return (vote_targets, center_targets, size_class_targets,
+                size_res_targets, dir_class_targets, dir_res_targets,
+                mask_targets, centerness_targets, corner3d_targets,
+                extra_targets, vote_mask, positive_mask, negative_mask,
+                centerness_weights, box_loss_weights, one_hot_size_targets,
+                heading_res_loss_weight, proposal_recall, vote_recall)
 
     def get_targets_single(self,
                            points,
@@ -351,14 +396,24 @@ class SSD3DHead(VoteHead):
             tuple[torch.Tensor]: Targets of ssd3d head.
         """
         assert self.bbox_coder.with_rot or pts_semantic_mask is not None
+        proposal_num = aggregated_points.shape[0]
         gt_bboxes_3d = gt_bboxes_3d.to(points.device)
         valid_gt = gt_labels_3d != -1
         gt_bboxes_3d = gt_bboxes_3d[valid_gt]
         gt_labels_3d = gt_labels_3d[valid_gt]
         gt_corner3d = gt_bboxes_3d.corners
 
-        (center_targets, size_targets, dir_class_targets, dir_res_targets,
-         extra_targets) = self.bbox_coder.encode(gt_bboxes_3d, gt_labels_3d)
+        if self.use_anchor_free:
+            (center_targets, size_res_targets, dir_class_targets,
+             dir_res_targets,
+             extra_targets) = self.bbox_coder.encode(gt_bboxes_3d,
+                                                     gt_labels_3d)
+        else:
+            (center_targets, size_class_targets, size_res_targets,
+             dir_class_targets,
+             dir_res_targets) = self.bbox_coder.encode(gt_bboxes_3d,
+                                                       gt_labels_3d)
+            extra_targets = None
 
         points_mask, assignment = self._assign_targets_by_points_inside(
             gt_bboxes_3d, aggregated_points)
@@ -367,16 +422,19 @@ class SSD3DHead(VoteHead):
             points_mask.sum(-1) > 0].unique().shape[0] / gt_labels_3d.shape[0]
 
         center_targets = center_targets[assignment]
-        size_res_targets = size_targets[assignment]
+        size_res_targets = size_res_targets[assignment]
         mask_targets = gt_labels_3d[assignment]
         dir_class_targets = dir_class_targets[assignment]
         dir_res_targets = dir_res_targets[assignment]
         corner3d_targets = gt_corner3d[assignment]
-        if extra_targets is not None:
+        if self.extra_reg_dim != 0:
             extra_targets = extra_targets[assignment]
 
+        half_size_target = gt_bboxes_3d.dims / 2
+        half_size_target = half_size_target[assignment]
+
         top_center_targets = center_targets.clone()
-        top_center_targets[:, 2] += size_res_targets[:, 2]
+        top_center_targets[:, 2] += half_size_target[:, 2]
         dist = torch.norm(aggregated_points - top_center_targets, dim=1)
         dist_mask = dist < self.train_cfg.pos_distance_thr
         positive_mask = (points_mask.max(1)[0] > 0) * dist_mask
@@ -391,17 +449,17 @@ class SSD3DHead(VoteHead):
                 canonical_xyz.unsqueeze(0).transpose(0, 1),
                 -gt_bboxes_3d.yaw[assignment], 2).squeeze(1)
         distance_front = torch.clamp(
-            size_res_targets[:, 0] - canonical_xyz[:, 0], min=0)
+            half_size_target[:, 0] - canonical_xyz[:, 0], min=0)
         distance_back = torch.clamp(
-            size_res_targets[:, 0] + canonical_xyz[:, 0], min=0)
+            half_size_target[:, 0] + canonical_xyz[:, 0], min=0)
         distance_left = torch.clamp(
-            size_res_targets[:, 1] - canonical_xyz[:, 1], min=0)
+            half_size_target[:, 1] - canonical_xyz[:, 1], min=0)
         distance_right = torch.clamp(
-            size_res_targets[:, 1] + canonical_xyz[:, 1], min=0)
+            half_size_target[:, 1] + canonical_xyz[:, 1], min=0)
         distance_top = torch.clamp(
-            size_res_targets[:, 2] - canonical_xyz[:, 2], min=0)
+            half_size_target[:, 2] - canonical_xyz[:, 2], min=0)
         distance_bottom = torch.clamp(
-            size_res_targets[:, 2] + canonical_xyz[:, 2], min=0)
+            half_size_target[:, 2] + canonical_xyz[:, 2], min=0)
 
         centerness_l = torch.min(distance_front, distance_back) / torch.max(
             distance_front, distance_back)
@@ -421,6 +479,15 @@ class SSD3DHead(VoteHead):
         centerness_targets = centerness_targets.unsqueeze(
             1) * one_hot_centerness_targets
 
+        if not self.use_anchor_free:
+            size_class_targets = size_class_targets[assignment]
+            mean_sizes = size_res_targets.new_tensor(
+                self.bbox_coder.mean_sizes).unsqueeze(0)
+            pos_mean_sizes = mean_sizes[0][size_class_targets]
+            size_res_targets /= pos_mean_sizes
+        else:
+            size_class_targets = None
+
         # Vote loss targets
         enlarged_gt_bboxes_3d = gt_bboxes_3d.enlarged_box(
             self.train_cfg.expand_dims_length)
@@ -435,10 +502,11 @@ class SSD3DHead(VoteHead):
         vote_recall = vote_assignment[
             vote_mask.sum(-1) > 0].unique().shape[0] / gt_labels_3d.shape[0]
 
-        return (vote_targets, center_targets, size_res_targets,
-                dir_class_targets, dir_res_targets, mask_targets,
-                extra_targets, centerness_targets, corner3d_targets, vote_mask,
-                positive_mask, negative_mask, proposal_recall, vote_recall)
+        return (vote_targets, center_targets, size_class_targets,
+                size_res_targets, dir_class_targets, dir_res_targets,
+                mask_targets, extra_targets, centerness_targets,
+                corner3d_targets, vote_mask, positive_mask, negative_mask,
+                proposal_recall, vote_recall)
 
     def get_bboxes(self, points, bbox_preds, input_metas, rescale=False):
         """Generate bboxes from sdd3d head predictions.
@@ -470,6 +538,12 @@ class SSD3DHead(VoteHead):
                 with_yaw=self.bbox_coder.with_rot)
             results.append((bbox, score_selected, labels))
 
+        # import numpy as np
+        # np.save('pts_vis', points[0].cpu().numpy())
+        # sorted_idx = (-score_selected).argsort()
+        # np.save('corners', bbox.corners[sorted_idx].cpu().numpy())
+        # import pdb
+        # pdb.set_trace()
         return results
 
     def multiclass_nms_single(self, obj_scores, sem_scores, bbox, points,
@@ -500,10 +574,10 @@ class SSD3DHead(VoteHead):
             box_indices.scatter_add_(0, box_idx.long(),
                                      box_idx.new_ones(box_idx.shape))
             box_indices = box_indices[:-1]
-            nonempty_box_mask = box_indices >= 0
+            nonempty_box_mask = box_indices > 0
         elif isinstance(bbox, DepthInstance3DBoxes):
             box_indices = bbox.points_in_boxes(points)
-            nonempty_box_mask = box_indices.T.sum(1) >= 0
+            nonempty_box_mask = box_indices.T.sum(1) > 0
         else:
             raise NotImplementedError('Unsupported bbox type!')
 
@@ -532,12 +606,16 @@ class SSD3DHead(VoteHead):
             bbox_selected, score_selected, labels = [], [], []
             for k in range(sem_scores.shape[-1]):
                 bbox_selected.append(bbox[selected].tensor)
-                score_selected.append(obj_scores[selected])
+                score_selected.append(sem_scores[selected][:, k])
                 labels.append(
                     torch.zeros_like(bbox_classes[selected]).fill_(k))
             bbox_selected = torch.cat(bbox_selected, 0)
             score_selected = torch.cat(score_selected, 0)
             labels = torch.cat(labels, 0)
+            scores_mask = (score_selected >= self.test_cfg.score_thr)
+            bbox_selected = bbox_selected[scores_mask]
+            score_selected = score_selected[scores_mask]
+            labels = labels[scores_mask]
         else:
             bbox_selected = bbox[selected].tensor
             score_selected = obj_scores[selected]

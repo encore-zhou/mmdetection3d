@@ -16,13 +16,19 @@ class PartialBinBasedBBoxCoder(BaseBBoxCoder):
         with_rot (bool): Whether the bbox is with rotation.
     """
 
-    def __init__(self, num_dir_bins, num_sizes, mean_sizes, with_rot=True):
+    def __init__(self,
+                 num_dir_bins,
+                 num_sizes,
+                 mean_sizes,
+                 with_rot=True,
+                 with_obj=True):
         super(PartialBinBasedBBoxCoder, self).__init__()
         assert len(mean_sizes) == num_sizes
         self.num_dir_bins = num_dir_bins
         self.num_sizes = num_sizes
         self.mean_sizes = mean_sizes
         self.with_rot = with_rot
+        self.with_obj = with_obj
 
     def encode(self, gt_bboxes_3d, gt_labels_3d):
         """Encode ground truth to prediction targets.
@@ -118,6 +124,7 @@ class PartialBinBasedBBoxCoder(BaseBBoxCoder):
         # decode center
         end += 3
         # (batch_size, num_proposal, 3)
+        results['center_offset'] = reg_preds_trans[..., start:end]
         results['center'] = base_xyz + \
             reg_preds_trans[..., start:end].contiguous()
         start = end
@@ -151,14 +158,18 @@ class PartialBinBasedBBoxCoder(BaseBBoxCoder):
         results['size_res'] = (
             size_res_norm * mean_sizes.unsqueeze(0).unsqueeze(0))
 
-        # decode objectness score
-        start = 0
-        end = 2
-        results['obj_scores'] = cls_preds_trans[..., start:end].contiguous()
-        start = end
+        if self.with_obj:
+            # decode objectness score
+            start = 0
+            end = 2
+            results['obj_scores'] = cls_preds_trans[...,
+                                                    start:end].contiguous()
+            start = end
 
-        # decode semantic score
-        results['sem_scores'] = cls_preds_trans[..., start:].contiguous()
+            # decode semantic score
+            results['sem_scores'] = cls_preds_trans[..., start:].contiguous()
+        else:
+            results['obj_scores'] = cls_preds
 
         return results
 

@@ -84,7 +84,7 @@ class AnchorFreeBBoxCoder(PartialBinBasedBBoxCoder):
             dir_angle = center.new_zeros(batch_size, num_proposal, 1)
 
         # decode bbox size
-        bbox_size = torch.clamp(bbox_out['size'] * 2, min=0.1)
+        bbox_size = torch.clamp(bbox_out['size_res'] * 2, min=0.1)
 
         bbox3d = torch.cat([center, bbox_size, dir_angle], dim=-1)
 
@@ -120,7 +120,7 @@ class AnchorFreeBBoxCoder(PartialBinBasedBBoxCoder):
         # decode center
         end += 3
         # (batch_size, num_proposal, 3)
-        results['size'] = reg_preds_trans[..., start:end]
+        results['size_res'] = reg_preds_trans[..., start:end]
         start = end
 
         # decode direction
