@@ -258,9 +258,9 @@ class SSD3DHead(VoteHead):
             proposal_recall).mean()
         losses['vote_recall'] = vote_loss.new_tensor(vote_recall).mean()
         losses['proposal_ratio'] = positive_mask.sum() / \
-            float(positive_mask.shape[1])
+            float(positive_mask.shape[1] * positive_mask.shape[0])
         losses['vote_ratio'] = (vote_mask > 0).sum() / \
-            float(vote_mask.shape[1])
+            float(vote_mask.shape[1] * vote_mask.shape[0])
         return losses
 
     def get_targets(self,
@@ -561,7 +561,7 @@ class SSD3DHead(VoteHead):
             tuple[torch.Tensor]: Bounding boxes, scores and labels.
         """
         num_bbox = bbox.shape[0]
-        if isinstance(input_meta['box_type_3d'], LiDARInstance3DBoxes):
+        if input_meta['box_type_3d'] == LiDARInstance3DBoxes:
             origin = (0.5, 0.5, 1.0)
         else:
             origin = (0.5, 0.5, 0.5)
