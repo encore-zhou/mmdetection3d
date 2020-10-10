@@ -305,6 +305,7 @@ class SSD3DHead(VoteHead):
 
         seed_points = [
             bbox_preds['seed_points'][i, :self.num_candidates].detach()
+            if self.num_candidates != -1 else bbox_preds['seed_points'][i]
             for i in range(len(gt_labels_3d))
         ]
 
