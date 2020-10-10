@@ -112,9 +112,15 @@ class VoteHead(nn.Module):
             torch.Tensor: Features of input points.
             torch.Tensor: Indices of input points.
         """
-        seed_points = feat_dict['fp_xyz'][-1]
-        seed_features = feat_dict['fp_features'][-1]
-        seed_indices = feat_dict['fp_indices'][-1]
+        if 'input_keys' in self.train_cfg:
+            input_keys = self.train_cfg['input_keys']
+            seed_points = feat_dict[input_keys['seed_points']][-1]
+            seed_features = feat_dict[input_keys['seed_features']][-1]
+            seed_indices = feat_dict[input_keys['seed_indices']][-1]
+        else:
+            seed_points = feat_dict['fp_xyz'][-1]
+            seed_features = feat_dict['fp_features'][-1]
+            seed_indices = feat_dict['fp_indices'][-1]
 
         return seed_points, seed_features, seed_indices
 
