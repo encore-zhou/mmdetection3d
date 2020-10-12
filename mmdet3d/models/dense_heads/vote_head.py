@@ -59,7 +59,6 @@ class VoteHead(nn.Module):
         self.num_classes = num_classes
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
-        self.gt_per_seed = vote_module_cfg['gt_per_seed']
         self.num_proposal = vote_aggregation_cfg['num_point']
 
         self.objectness_loss = build_loss(objectness_loss)
@@ -76,7 +75,11 @@ class VoteHead(nn.Module):
         self.num_sizes = self.bbox_coder.num_sizes
         self.num_dir_bins = self.bbox_coder.num_dir_bins
 
-        self.vote_module = VoteModule(**vote_module_cfg)
+        if vote_module_cfg is None:
+            self.vote_module = None
+        else:
+            self.gt_per_seed = vote_module_cfg['gt_per_seed']
+            self.vote_module = VoteModule(**vote_module_cfg)
         self.vote_aggregation = build_sa_module(vote_aggregation_cfg)
 
         # Bbox classification and regression
@@ -112,7 +115,7 @@ class VoteHead(nn.Module):
             torch.Tensor: Features of input points.
             torch.Tensor: Indices of input points.
         """
-        if 'input_keys' in self.train_cfg:
+        if 'input_keys' in self.test_cfg:
             input_keys = self.train_cfg['input_keys']
             seed_points = feat_dict[input_keys['seed_points']][-1]
             seed_features = feat_dict[input_keys['seed_features']][-1]
@@ -149,17 +152,23 @@ class VoteHead(nn.Module):
             feat_dict)
 
         # 1. generate vote_points from seed_points
-        vote_points, vote_features, vote_offset = self.vote_module(
-            seed_points, seed_features)
-        results = dict(
-            seed_points=seed_points,
-            seed_indices=seed_indices,
-            vote_points=vote_points,
-            vote_features=vote_features,
-            vote_offset=vote_offset)
+        if self.vote_module is not None:
+            vote_points, vote_features, vote_offset = self.vote_module(
+                seed_points, seed_features)
+            results = dict(
+                seed_points=seed_points,
+                seed_indices=seed_indices,
+                vote_points=vote_points,
+                vote_features=vote_features,
+                vote_offset=vote_offset)
+        else:
+            results = dict(seed_points=seed_points, seed_indices=seed_indices)
 
         # 2. aggregate vote_points
-        if sample_mod == 'vote':
+        if self.vote_module is None:
+            aggregation_inputs = dict(
+                points_xyz=seed_points, features=seed_features)
+        elif sample_mod == 'vote':
             # use fps in vote_aggregation
             aggregation_inputs = dict(
                 points_xyz=vote_points, features=vote_features)
@@ -249,10 +258,14 @@ class VoteHead(nn.Module):
          box_loss_weights, valid_gt_weights) = targets
 
         # calculate vote loss
-        vote_loss = self.vote_module.get_loss(bbox_preds['seed_points'],
-                                              bbox_preds['vote_points'],
-                                              bbox_preds['seed_indices'],
-                                              vote_target_masks, vote_targets)
+        if self.vote_module is not None:
+            vote_loss = self.vote_module.get_loss(bbox_preds['seed_points'],
+                                                  bbox_preds['vote_points'],
+                                                  bbox_preds['seed_indices'],
+                                                  vote_target_masks,
+                                                  vote_targets)
+        else:
+            vote_loss = objectness_targets.new_zeros(1)[0].float()
 
         # calculate objectness loss
         objectness_loss = self.objectness_loss(
@@ -276,7 +289,7 @@ class VoteHead(nn.Module):
 
         # calculate direction residual loss
         batch_size, proposal_num = size_class_targets.shape[:2]
-        heading_label_one_hot = vote_targets.new_zeros(
+        heading_label_one_hot = dir_class_targets.new_zeros(
             (batch_size, proposal_num, self.num_dir_bins))
         heading_label_one_hot.scatter_(2, dir_class_targets.unsqueeze(-1), 1)
         dir_res_norm = torch.sum(
@@ -291,7 +304,7 @@ class VoteHead(nn.Module):
             weight=box_loss_weights)
 
         # calculate size residual loss
-        one_hot_size_targets = vote_targets.new_zeros(
+        one_hot_size_targets = size_class_targets.new_zeros(
             (batch_size, proposal_num, self.num_sizes))
         one_hot_size_targets.scatter_(2, size_class_targets.unsqueeze(-1), 1)
         one_hot_size_targets_expand = one_hot_size_targets.unsqueeze(
@@ -388,8 +401,14 @@ class VoteHead(nn.Module):
                                           (0, 0, 0, pad_num))
             valid_gt_masks[index] = F.pad(valid_gt_masks[index], (0, pad_num))
 
-        vote_targets = torch.stack(vote_targets)
-        vote_target_masks = torch.stack(vote_target_masks)
+        if vote_targets[0] is None:
+            vote_targets = None
+        else:
+            vote_targets = torch.stack(vote_targets)
+        if vote_target_masks[0] is None:
+            vote_target_masks = None
+        else:
+            vote_target_masks = torch.stack(vote_target_masks)
         center_targets = torch.stack(center_targets)
         valid_gt_masks = torch.stack(valid_gt_masks)
 
@@ -442,7 +461,10 @@ class VoteHead(nn.Module):
 
         # generate votes target
         num_points = points.shape[0]
-        if self.bbox_coder.with_rot:
+        if self.vote_module is None:
+            vote_targets = None
+            vote_target_masks = None
+        elif self.bbox_coder.with_rot:
             vote_targets = points.new_zeros([num_points, 3 * self.gt_per_seed])
             vote_target_masks = points.new_zeros([num_points],
                                                  dtype=torch.long)
