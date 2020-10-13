@@ -411,10 +411,8 @@ class SSD3DHead(VoteHead):
                                                      gt_labels_3d)
         else:
             (center_targets, size_class_targets, size_res_targets,
-             dir_class_targets,
-             dir_res_targets) = self.bbox_coder.encode(gt_bboxes_3d,
-                                                       gt_labels_3d)
-            extra_targets = None
+             dir_class_targets, dir_res_targets, extra_targets) = \
+                self.bbox_coder.encode(gt_bboxes_3d, gt_labels_3d)
 
         points_mask, assignment = self._assign_targets_by_points_inside(
             gt_bboxes_3d, aggregated_points)
