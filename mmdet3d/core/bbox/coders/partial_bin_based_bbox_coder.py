@@ -58,8 +58,13 @@ class PartialBinBasedBBoxCoder(BaseBBoxCoder):
             dir_class_target = gt_labels_3d.new_zeros(box_num)
             dir_res_target = gt_bboxes_3d.tensor.new_zeros(box_num)
 
+        if gt_bboxes_3d.box_dim > 7:
+            extra_dim = gt_bboxes_3d.tensor[:, 7:]
+        else:
+            extra_dim = None
+
         return (center_target, size_class_target, size_res_target,
-                dir_class_target, dir_res_target)
+                dir_class_target, dir_res_target, extra_dim)
 
     def decode(self, bbox_out, suffix=''):
         """Decode predicted parts to bbox3d.
@@ -102,6 +107,10 @@ class PartialBinBasedBBoxCoder(BaseBBoxCoder):
                                       -1) + size_res.squeeze(2)
 
         bbox3d = torch.cat([center, bbox_size, dir_angle], dim=-1)
+
+        if 'extra_reg' in bbox_out.keys():
+            bbox3d = torch.cat([bbox3d, bbox_out['extra_reg']], dim=-1)
+
         return bbox3d
 
     def split_pred(self, cls_preds, reg_preds, base_xyz):
@@ -157,6 +166,9 @@ class PartialBinBasedBBoxCoder(BaseBBoxCoder):
         mean_sizes = reg_preds.new_tensor(self.mean_sizes)
         results['size_res'] = (
             size_res_norm * mean_sizes.unsqueeze(0).unsqueeze(0))
+
+        if start != reg_preds_trans.shape[2]:
+            results['extra_reg'] = reg_preds_trans[..., start:]
 
         if self.with_obj:
             # decode objectness score

@@ -3,6 +3,8 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
+from mmdet3d.core.bbox.structures import (DepthInstance3DBoxes,
+                                          LiDARInstance3DBoxes)
 from mmdet3d.core.post_processing import aligned_3d_nms
 from mmdet3d.models.builder import build_loss
 from mmdet3d.models.losses import chamfer_distance
@@ -54,7 +56,8 @@ class VoteHead(nn.Module):
                  dir_res_loss=None,
                  size_class_loss=None,
                  size_res_loss=None,
-                 semantic_loss=None):
+                 semantic_loss=None,
+                 velocity_loss=None):
         super(VoteHead, self).__init__()
         self.num_classes = num_classes
         self.train_cfg = train_cfg
@@ -70,6 +73,13 @@ class VoteHead(nn.Module):
             self.size_class_loss = build_loss(size_class_loss)
         if semantic_loss is not None:
             self.semantic_loss = build_loss(semantic_loss)
+
+        if velocity_loss is not None:
+            self.velocity_loss = build_loss(velocity_loss)
+            self.extra_reg_dim = 2
+        else:
+            self.velocity_loss = None
+            self.extra_reg_dim = 0
 
         self.bbox_coder = build_bbox_coder(bbox_coder)
         self.num_sizes = self.bbox_coder.num_sizes
@@ -102,7 +112,8 @@ class VoteHead(nn.Module):
         # Objectness scores (2), center residual (3),
         # heading class+residual (num_dir_bins*2),
         # size class+residual(num_sizes*4)
-        return 3 + self.num_dir_bins * 2 + self.num_sizes * 4
+        return 3 + self.num_dir_bins * 2 + self.num_sizes * 4 +\
+            self.extra_reg_dim
 
     def _extract_input(self, feat_dict):
         """Extract inputs from features dictionary.
@@ -116,7 +127,7 @@ class VoteHead(nn.Module):
             torch.Tensor: Indices of input points.
         """
         if 'input_keys' in self.test_cfg:
-            input_keys = self.train_cfg['input_keys']
+            input_keys = self.test_cfg['input_keys']
             seed_points = feat_dict[input_keys['seed_points']][-1]
             seed_features = feat_dict[input_keys['seed_features']][-1]
             seed_indices = feat_dict[input_keys['seed_indices']][-1]
@@ -255,7 +266,7 @@ class VoteHead(nn.Module):
         (vote_targets, vote_target_masks, size_class_targets, size_res_targets,
          dir_class_targets, dir_res_targets, center_targets, mask_targets,
          valid_gt_masks, objectness_targets, objectness_weights,
-         box_loss_weights, valid_gt_weights) = targets
+         box_loss_weights, valid_gt_weights, extra_targets) = targets
 
         # calculate vote loss
         if self.vote_module is not None:
@@ -334,6 +345,13 @@ class VoteHead(nn.Module):
             size_class_loss=size_class_loss,
             size_res_loss=size_res_loss)
 
+        if self.velocity_loss is not None:
+            veloc_loss = self.velocity_loss(
+                bbox_preds['extra_reg'],
+                extra_targets,
+                weight=box_loss_weights.unsqueeze(-1))
+            losses['veloc_loss'] = veloc_loss
+
         if ret_target:
             losses['targets'] = targets
 
@@ -390,7 +408,7 @@ class VoteHead(nn.Module):
 
         (vote_targets, vote_target_masks, size_class_targets, size_res_targets,
          dir_class_targets, dir_res_targets, center_targets, mask_targets,
-         objectness_targets, objectness_masks) = multi_apply(
+         objectness_targets, objectness_masks, extra_targets) = multi_apply(
              self.get_targets_single, points, gt_bboxes_3d, gt_labels_3d,
              pts_semantic_mask, pts_instance_mask, aggregated_points)
 
@@ -425,11 +443,16 @@ class VoteHead(nn.Module):
         size_res_targets = torch.stack(size_res_targets)
         mask_targets = torch.stack(mask_targets)
 
+        if extra_targets[0] is None:
+            extra_targets = None
+        else:
+            extra_targets = torch.stack(extra_targets)
+
         return (vote_targets, vote_target_masks, size_class_targets,
                 size_res_targets, dir_class_targets, dir_res_targets,
                 center_targets, mask_targets, valid_gt_masks,
                 objectness_targets, objectness_weights, box_loss_weights,
-                valid_gt_weights)
+                valid_gt_weights, extra_targets)
 
     def get_targets_single(self,
                            points,
@@ -471,9 +494,12 @@ class VoteHead(nn.Module):
             vote_target_idx = points.new_zeros([num_points], dtype=torch.long)
             box_indices_all = gt_bboxes_3d.points_in_boxes(points)
             for i in range(gt_labels_3d.shape[0]):
-                box_indices = box_indices_all[:, i]
-                indices = torch.nonzero(
-                    box_indices, as_tuple=False).squeeze(-1)
+                if isinstance(gt_bboxes_3d, LiDARInstance3DBoxes):
+                    indices = (box_indices_all == i).nonzero().squeeze(-1)
+                elif isinstance(gt_bboxes_3d, DepthInstance3DBoxes):
+                    box_indices = box_indices_all[:, i]
+                    indices = torch.nonzero(
+                        box_indices, as_tuple=False).squeeze(-1)
                 selected_points = points[indices]
                 vote_target_masks[indices] = 1
                 vote_targets_tmp = vote_targets[indices]
@@ -513,8 +539,8 @@ class VoteHead(nn.Module):
             raise NotImplementedError
 
         (center_targets, size_class_targets, size_res_targets,
-         dir_class_targets,
-         dir_res_targets) = self.bbox_coder.encode(gt_bboxes_3d, gt_labels_3d)
+         dir_class_targets, dir_res_targets, extra_targets) = \
+            self.bbox_coder.encode(gt_bboxes_3d, gt_labels_3d)
 
         proposal_num = aggregated_points.shape[0]
         distance1, _, assignment, _ = chamfer_distance(
@@ -550,12 +576,15 @@ class VoteHead(nn.Module):
         pos_mean_sizes = torch.sum(one_hot_size_targets * mean_sizes, 1)
         size_res_targets /= pos_mean_sizes
 
+        if extra_targets is not None:
+            extra_targets = extra_targets[assignment]
+
         mask_targets = gt_labels_3d[assignment]
 
         return (vote_targets, vote_target_masks, size_class_targets,
-                size_res_targets,
-                dir_class_targets, dir_res_targets, center_targets,
-                mask_targets.long(), objectness_targets, objectness_masks)
+                size_res_targets, dir_class_targets, dir_res_targets,
+                center_targets, mask_targets.long(), objectness_targets,
+                objectness_masks, extra_targets)
 
     def get_bboxes(self,
                    points,
@@ -618,14 +647,22 @@ class VoteHead(nn.Module):
             box_dim=bbox.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
             origin=(0.5, 0.5, 0.5))
+
         box_indices = bbox.points_in_boxes(points)
+
+        if isinstance(bbox, LiDARInstance3DBoxes):
+            nonempty_box_mask = obj_scores.new_zeros(bbox.tensor.shape[0] + 1)
+            nonempty_box_mask = nonempty_box_mask.scatter_add(
+                0, (box_indices + 1).long(),
+                obj_scores.new_ones(box_indices.shape[0]))
+            nonempty_box_mask = nonempty_box_mask[1:] > 5
+        elif isinstance(bbox, DepthInstance3DBoxes):
+            nonempty_box_mask = box_indices.T.sum(1) > 5
 
         corner3d = bbox.corners
         minmax_box3d = corner3d.new(torch.Size((corner3d.shape[0], 6)))
         minmax_box3d[:, :3] = torch.min(corner3d, dim=1)[0]
         minmax_box3d[:, 3:] = torch.max(corner3d, dim=1)[0]
-
-        nonempty_box_mask = box_indices.T.sum(1) > 5
 
         bbox_classes = torch.argmax(sem_scores, -1)
         nms_selected = aligned_3d_nms(minmax_box3d[nonempty_box_mask],
