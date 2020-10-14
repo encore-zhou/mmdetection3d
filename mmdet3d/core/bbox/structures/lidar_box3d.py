@@ -241,6 +241,7 @@ class LiDARInstance3DBoxes(BaseInstance3DBoxes):
         Returns:
             torch.Tensor: The index of box where each point are in.
         """
+        assert points.shape[1] == 3
         box_idx = points_in_boxes_gpu(
             points.unsqueeze(0),
             self.tensor[:, :7].unsqueeze(0).to(points.device)).squeeze(0)

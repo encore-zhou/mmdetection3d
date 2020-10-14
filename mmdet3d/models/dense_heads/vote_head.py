@@ -492,7 +492,7 @@ class VoteHead(nn.Module):
             vote_target_masks = points.new_zeros([num_points],
                                                  dtype=torch.long)
             vote_target_idx = points.new_zeros([num_points], dtype=torch.long)
-            box_indices_all = gt_bboxes_3d.points_in_boxes(points)
+            box_indices_all = gt_bboxes_3d.points_in_boxes(points[:, :3])
             for i in range(gt_labels_3d.shape[0]):
                 if isinstance(gt_bboxes_3d, LiDARInstance3DBoxes):
                     indices = (box_indices_all == i).nonzero().squeeze(-1)
