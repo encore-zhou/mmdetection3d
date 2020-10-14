@@ -139,6 +139,19 @@ def main():
         cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
     logger.info(f'Model:\n{model}')
     datasets = [build_dataset(cfg.data.train)]
+    ##################
+    # mean_size = torch.zeros([10, 3])
+    # obj_cnt = torch.zeros([10])
+    # for i in range(len(datasets[0])):
+    #     cur_data = datasets[0].__getitem__(i)
+    #     for obj_idx in range(cur_data['gt_bboxes_3d'].data.tensor.shape[0]):
+    #         mean_size[cur_data['gt_labels_3d'].data[obj_idx]
+    #                   ] += cur_data['gt_bboxes_3d'].data.dims[obj_idx]
+    #         obj_cnt[cur_data['gt_labels_3d'].data[obj_idx]] += 1
+    # import pdb
+    # pdb.set_trace()
+    # mean_size / obj_cnt.unsqueeze(-1)
+    ##################
     if len(cfg.workflow) == 2:
         val_dataset = copy.deepcopy(cfg.data.val)
         val_dataset.pipeline = cfg.data.train.pipeline

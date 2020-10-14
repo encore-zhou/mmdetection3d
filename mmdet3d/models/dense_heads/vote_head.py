@@ -670,6 +670,9 @@ class VoteHead(nn.Module):
                                       bbox_classes[nonempty_box_mask],
                                       self.test_cfg.nms_thr)
 
+        if nms_selected.shape[0] > self.test_cfg.max_output_num:
+            nms_selected = nms_selected[:self.test_cfg.max_output_num]
+
         # filter empty boxes and boxes with low score
         scores_mask = (obj_scores > self.test_cfg.score_thr)
         nonempty_box_inds = torch.nonzero(
