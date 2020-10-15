@@ -694,7 +694,8 @@ class VoteHead(nn.Module):
             score_selected = obj_scores[selected]
             labels = bbox_classes[selected]
 
-        if score_selected.shape[0] > self.test_cfg.max_output_num:
+        if 'max_output_num' in self.test_cfg.keys() and \
+                score_selected.shape[0] > self.test_cfg.max_output_num:
             sorted_index = score_selected.argsort()
             bbox_selected = bbox_selected[
                 sorted_index[:self.test_cfg.max_output_num]]
