@@ -51,6 +51,7 @@ class SSD3DHead(VoteHead):
                  conv_cfg=dict(type='Conv1d'),
                  norm_cfg=dict(type='BN1d'),
                  act_cfg=dict(type='ReLU'),
+                 use_orig_vote_loss=False,
                  objectness_loss=None,
                  center_loss=None,
                  dir_class_loss=None,
@@ -88,6 +89,7 @@ class SSD3DHead(VoteHead):
             self.velocity_loss = None
 
         self.num_candidates = vote_module_cfg['num_points']
+        self.use_orig_vote_loss = use_orig_vote_loss
 
     def _get_cls_out_channels(self):
         """Return the channel number of classification outputs."""
@@ -230,12 +232,19 @@ class SSD3DHead(VoteHead):
             pred_corners3d,
             corner3d_targets.reshape(-1, 8, 3),
             weight=box_loss_weights.view(-1, 1, 1))
-
+        # import pdb
+        # pdb.set_trace()
         # calculate vote loss
-        vote_loss = self.vote_loss(
-            bbox_preds['vote_offset'].transpose(1, 2),
-            vote_targets,
-            weight=vote_mask.unsqueeze(-1))
+        if not self.use_orig_vote_loss:
+            vote_loss = self.vote_loss(
+                bbox_preds['vote_offset'].transpose(1, 2),
+                vote_targets,
+                weight=vote_mask.unsqueeze(-1))
+        else:
+            vote_loss = self.vote_module.get_loss(bbox_preds['seed_points'],
+                                                  bbox_preds['vote_points'],
+                                                  bbox_preds['seed_indices'],
+                                                  vote_mask, vote_targets)
 
         losses = dict(
             centerness_loss=centerness_loss,
@@ -344,7 +353,8 @@ class SSD3DHead(VoteHead):
                                   1, 1, self.num_classes).float()
         centerness_weights = centerness_weights / \
             (centerness_weights.sum() + 1e-6)
-        vote_mask = vote_mask / (vote_mask.sum() + 1e-6)
+        if not self.use_orig_vote_loss:
+            vote_mask = vote_mask / (vote_mask.sum() + 1e-6)
 
         box_loss_weights = positive_mask / (positive_mask.sum() + 1e-6)
 
@@ -488,18 +498,26 @@ class SSD3DHead(VoteHead):
             size_class_targets = None
 
         # Vote loss targets
-        enlarged_gt_bboxes_3d = gt_bboxes_3d.enlarged_box(
-            self.train_cfg.expand_dims_length)
-        enlarged_gt_bboxes_3d.tensor[:, 2] -= self.train_cfg.expand_dims_length
-        vote_mask, vote_assignment = self._assign_targets_by_points_inside(
-            enlarged_gt_bboxes_3d, seed_points)
+        if not self.use_orig_vote_loss:
+            enlarged_gt_bboxes_3d = gt_bboxes_3d.enlarged_box(
+                self.train_cfg.expand_dims_length)
+            enlarged_gt_bboxes_3d.tensor[:, 2] -= \
+                self.train_cfg.expand_dims_length
+            vote_mask, vote_assignment = self._assign_targets_by_points_inside(
+                enlarged_gt_bboxes_3d, seed_points)
 
-        vote_targets = gt_bboxes_3d.gravity_center
-        vote_targets = vote_targets[vote_assignment] - seed_points
-        vote_mask = vote_mask.max(1)[0] > 0
+            vote_targets = gt_bboxes_3d.gravity_center
+            vote_targets = vote_targets[vote_assignment] - seed_points
+            vote_mask = vote_mask.max(1)[0] > 0
 
-        vote_recall = vote_assignment[
-            vote_mask.sum(-1) > 0].unique().shape[0] / gt_labels_3d.shape[0]
+            vote_recall = vote_assignment[vote_mask.sum(-1) > 0].unique(
+            ).shape[0] / gt_labels_3d.shape[0]
+        else:
+            # generate votes target
+            vote_targets, vote_mask = self._generate_vote_targets(
+                points, gt_bboxes_3d, gt_labels_3d, pts_semantic_mask,
+                pts_instance_mask)
+            vote_recall = vote_mask.sum() / vote_mask.shape[0]
 
         return (vote_targets, center_targets, size_class_targets,
                 size_res_targets, dir_class_targets, dir_res_targets,

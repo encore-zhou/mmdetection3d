@@ -461,35 +461,12 @@ class VoteHead(nn.Module):
                 objectness_targets, objectness_weights, box_loss_weights,
                 valid_gt_weights, extra_targets)
 
-    def get_targets_single(self,
-                           points,
-                           gt_bboxes_3d,
-                           gt_labels_3d,
-                           pts_semantic_mask=None,
-                           pts_instance_mask=None,
-                           aggregated_points=None):
-        """Generate targets of vote head for single batch.
-
-        Args:
-            points (torch.Tensor): Points of each batch.
-            gt_bboxes_3d (:obj:`BaseInstance3DBoxes`): Ground truth \
-                boxes of each batch.
-            gt_labels_3d (torch.Tensor): Labels of each batch.
-            pts_semantic_mask (None | torch.Tensor): Point-wise semantic
-                label of each batch.
-            pts_instance_mask (None | torch.Tensor): Point-wise instance
-                label of each batch.
-            aggregated_points (torch.Tensor): Aggregated points from
-                vote aggregation layer.
-
-        Returns:
-            tuple[torch.Tensor]: Targets of vote head.
-        """
-        assert self.bbox_coder.with_rot or pts_semantic_mask is not None
-
-        gt_bboxes_3d = gt_bboxes_3d.to(points.device)
-
-        # generate votes target
+    def _generate_vote_targets(self,
+                               points,
+                               gt_bboxes_3d,
+                               gt_labels_3d,
+                               pts_semantic_mask=None,
+                               pts_instance_mask=None):
         num_points = points.shape[0]
         if self.vote_module is None:
             vote_targets = None
@@ -544,6 +521,40 @@ class VoteHead(nn.Module):
             vote_targets = vote_targets.repeat((1, self.gt_per_seed))
         else:
             raise NotImplementedError
+        return vote_targets, vote_target_masks
+
+    def get_targets_single(self,
+                           points,
+                           gt_bboxes_3d,
+                           gt_labels_3d,
+                           pts_semantic_mask=None,
+                           pts_instance_mask=None,
+                           aggregated_points=None):
+        """Generate targets of vote head for single batch.
+
+        Args:
+            points (torch.Tensor): Points of each batch.
+            gt_bboxes_3d (:obj:`BaseInstance3DBoxes`): Ground truth \
+                boxes of each batch.
+            gt_labels_3d (torch.Tensor): Labels of each batch.
+            pts_semantic_mask (None | torch.Tensor): Point-wise semantic
+                label of each batch.
+            pts_instance_mask (None | torch.Tensor): Point-wise instance
+                label of each batch.
+            aggregated_points (torch.Tensor): Aggregated points from
+                vote aggregation layer.
+
+        Returns:
+            tuple[torch.Tensor]: Targets of vote head.
+        """
+        assert self.bbox_coder.with_rot or pts_semantic_mask is not None
+
+        gt_bboxes_3d = gt_bboxes_3d.to(points.device)
+
+        # generate votes target
+        vote_targets, vote_target_masks = self._generate_vote_targets(
+            points, gt_bboxes_3d, gt_labels_3d, pts_semantic_mask,
+            pts_instance_mask)
 
         (center_targets, size_class_targets, size_res_targets,
          dir_class_targets, dir_res_targets, extra_targets) = \
