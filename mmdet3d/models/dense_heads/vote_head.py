@@ -157,7 +157,7 @@ class VoteHead(nn.Module):
         Returns:
             dict: Predictions of vote head.
         """
-        assert sample_mod in ['vote', 'seed', 'random', 'spec']
+        assert sample_mod in ['vote', 'seed', 'random', 'spec', 'spec2']
 
         seed_points, seed_features, seed_indices = self._extract_input(
             feat_dict)
@@ -207,6 +207,13 @@ class VoteHead(nn.Module):
                 points_xyz=seed_points,
                 features=seed_features,
                 target_xyz=vote_points)
+        elif sample_mod == 'spec2':
+            # Specify the new center in vote_aggregation
+            num_candidates = vote_points.shape[1] // 2
+            aggregation_inputs = dict(
+                points_xyz=vote_points,
+                features=seed_features,
+                target_xyz=vote_points[:, :num_candidates])
         else:
             raise NotImplementedError(
                 f'Sample mode {sample_mod} is not supported!')
