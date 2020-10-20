@@ -232,8 +232,7 @@ class SSD3DHead(VoteHead):
             pred_corners3d,
             corner3d_targets.reshape(-1, 8, 3),
             weight=box_loss_weights.view(-1, 1, 1))
-        # import pdb
-        # pdb.set_trace()
+
         # calculate vote loss
         if not self.use_orig_vote_loss:
             vote_loss = self.vote_loss(
@@ -546,9 +545,18 @@ class SSD3DHead(VoteHead):
         results = list()
 
         for b in range(batch_size):
-            bbox_selected, score_selected, labels = self.multiclass_nms_single(
-                obj_scores[b], sem_scores[b], bbox3d[b], points[b, ..., :3],
-                input_metas[b])
+            if input_metas[b]['box_type_3d'] == DepthInstance3DBoxes:
+                bbox_selected, score_selected, labels = \
+                    super(SSD3DHead, self).multiclass_nms_single(
+                        obj_scores[b], sem_scores[b], bbox3d[b],
+                        points[b, ..., :3], input_metas[b])
+            elif input_metas[b]['box_type_3d'] == LiDARInstance3DBoxes:
+                bbox_selected, score_selected, labels = \
+                    self.multiclass_nms_single(obj_scores[b], sem_scores[b],
+                                               bbox3d[b], points[b, ..., :3],
+                                               input_metas[b])
+            else:
+                raise NotImplementedError
             bbox = input_metas[b]['box_type_3d'](
                 bbox_selected.clone(),
                 box_dim=bbox_selected.shape[-1],
