@@ -6,6 +6,7 @@ from mmdet3d.core.bbox.structures import (DepthInstance3DBoxes,
                                           LiDARInstance3DBoxes,
                                           rotation_3d_in_axis)
 from mmdet3d.models.builder import build_loss
+from mmdet3d.models.losses import chamfer_distance
 from mmdet.core import multi_apply
 from mmdet.models import HEADS
 from .vote_head import VoteHead
@@ -52,6 +53,7 @@ class SSD3DHead(VoteHead):
                  norm_cfg=dict(type='BN1d'),
                  act_cfg=dict(type='ReLU'),
                  use_orig_vote_loss=False,
+                 assignment_strategy='pts_in_bbox',
                  objectness_loss=None,
                  center_loss=None,
                  dir_class_loss=None,
@@ -90,6 +92,7 @@ class SSD3DHead(VoteHead):
 
         self.num_candidates = vote_module_cfg['num_points']
         self.use_orig_vote_loss = use_orig_vote_loss
+        self.assignment_strategy = assignment_strategy
 
     def _get_cls_out_channels(self):
         """Return the channel number of classification outputs."""
@@ -423,8 +426,20 @@ class SSD3DHead(VoteHead):
              dir_class_targets, dir_res_targets, extra_targets) = \
                 self.bbox_coder.encode(gt_bboxes_3d, gt_labels_3d)
 
-        points_mask, assignment = self._assign_targets_by_points_inside(
-            gt_bboxes_3d, aggregated_points)
+        if self.assignment_strategy == 'pts_in_bbox':
+            points_mask, assignment = self._assign_targets_by_points_inside(
+                gt_bboxes_3d, aggregated_points)
+        elif self.assignment_strategy == 'chamfer_distance':
+            distance1, _, assignment, _ = chamfer_distance(
+                aggregated_points.unsqueeze(0),
+                center_targets.unsqueeze(0),
+                reduction='none')
+            assignment = assignment.squeeze(0)
+            euclidean_distance1 = torch.sqrt(distance1.squeeze(0) + 1e-6)
+            points_mask = points.new_zeros((proposal_num), dtype=torch.long)
+            points_mask[
+                euclidean_distance1 < self.train_cfg['pos_distance_thr']] = 1
+            points_mask = points_mask.unsqueeze(-1)
 
         proposal_recall = assignment[
             points_mask.sum(-1) > 0].unique().shape[0] / gt_labels_3d.shape[0]
@@ -440,13 +455,16 @@ class SSD3DHead(VoteHead):
 
         half_size_target = gt_bboxes_3d.dims / 2
         half_size_target = half_size_target[assignment]
-
+        # import pdb
+        # pdb.set_trace()
         top_center_targets = center_targets.clone()
-        top_center_targets[:, 2] += half_size_target[:, 2]
+        if isinstance(gt_bboxes_3d, LiDARInstance3DBoxes):
+            top_center_targets[:, 2] += half_size_target[:, 2]
         dist = torch.norm(aggregated_points - top_center_targets, dim=1)
         dist_mask = dist < self.train_cfg.pos_distance_thr
         positive_mask = (points_mask.max(1)[0] > 0) * dist_mask
-        negative_mask = (points_mask.max(1)[0] == 0)
+        dist_mask = dist > self.train_cfg.neg_distance_thr
+        negative_mask = (points_mask.max(1)[0] == 0) * dist_mask
 
         # Centerness loss targets
         canonical_xyz = aggregated_points - center_targets
