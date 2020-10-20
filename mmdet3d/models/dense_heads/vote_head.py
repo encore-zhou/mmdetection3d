@@ -157,7 +157,9 @@ class VoteHead(nn.Module):
         Returns:
             dict: Predictions of vote head.
         """
-        assert sample_mod in ['vote', 'seed', 'random', 'spec', 'spec2']
+        assert sample_mod in [
+            'vote', 'seed', 'random', 'spec', 'spec2', 'spec3'
+        ]
 
         seed_points, seed_features, seed_indices = self._extract_input(
             feat_dict)
@@ -213,6 +215,13 @@ class VoteHead(nn.Module):
             aggregation_inputs = dict(
                 points_xyz=vote_points,
                 features=seed_features,
+                target_xyz=vote_points[:, :num_candidates])
+        elif sample_mod == 'spec3':
+            # Specify the new center in vote_aggregation
+            num_candidates = vote_points.shape[1] // 2
+            aggregation_inputs = dict(
+                points_xyz=vote_points,
+                features=vote_features,
                 target_xyz=vote_points[:, :num_candidates])
         else:
             raise NotImplementedError(
