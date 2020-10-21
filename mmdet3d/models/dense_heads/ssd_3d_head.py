@@ -455,8 +455,7 @@ class SSD3DHead(VoteHead):
 
         half_size_target = gt_bboxes_3d.dims / 2
         half_size_target = half_size_target[assignment]
-        # import pdb
-        # pdb.set_trace()
+
         top_center_targets = center_targets.clone()
         if isinstance(gt_bboxes_3d, LiDARInstance3DBoxes):
             top_center_targets[:, 2] += half_size_target[:, 2]
@@ -513,7 +512,8 @@ class SSD3DHead(VoteHead):
             size_res_targets /= pos_mean_sizes
         else:
             size_class_targets = None
-
+        # import pdb
+        # pdb.set_trace()
         # Vote loss targets
         if not self.use_orig_vote_loss:
             enlarged_gt_bboxes_3d = gt_bboxes_3d.enlarged_box(
@@ -534,7 +534,7 @@ class SSD3DHead(VoteHead):
             vote_targets, vote_mask = self._generate_vote_targets(
                 points, gt_bboxes_3d, gt_labels_3d, pts_semantic_mask,
                 pts_instance_mask)
-            vote_recall = vote_mask.sum() / vote_mask.shape[0]
+            vote_recall = vote_mask.sum() / (vote_mask.shape[0] * 1.0)
 
         return (vote_targets, center_targets, size_class_targets,
                 size_res_targets, dir_class_targets, dir_res_targets,
