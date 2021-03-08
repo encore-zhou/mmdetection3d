@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from mmcv.ops.nms import batched_nms
 from mmcv.runner import force_fp32
@@ -360,6 +361,11 @@ class SSD3DHead(VoteHead):
                     positive_mask, negative_mask)
 
         gt_corner3d = gt_bboxes_3d.corners
+
+        # limit yaw
+        # for KITTI (-pi, pi)
+        gt_bboxes_3d.yaw[gt_bboxes_3d.yaw < -np.pi] += 2 * np.pi
+        gt_bboxes_3d.yaw[gt_bboxes_3d.yaw > np.pi] -= 2 * np.pi
 
         (center_targets, size_targets, dir_class_targets,
          dir_res_targets) = self.bbox_coder.encode(gt_bboxes_3d, gt_labels_3d)
